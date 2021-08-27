@@ -62,6 +62,10 @@ public final class Security {
     private static final Debug sdebug =
                         Debug.getInstance("properties");
 
+    /* System property file*/
+    private static final String SYSTEM_PROPERTIES =
+        "/etc/crypto-policies/back-ends/java.config";
+
     /* The java.security properties */
     private static Properties props;
 
@@ -103,6 +107,13 @@ public final class Security {
         boolean success = loadProps(propFile, null, false);
         if (!success) {
             throw new InternalError("Error loading java.security file");
+        }
+
+        if ("true".equalsIgnoreCase(props.getProperty
+                ("security.useSystemPropertiesFile"))) {
+            // now load the system file, if it exists, so its values
+            // will win if they conflict with the earlier values
+	    loadProps(null, SYSTEM_PROPERTIES, false);
         }
 
         if ("true".equalsIgnoreCase(props.getProperty
