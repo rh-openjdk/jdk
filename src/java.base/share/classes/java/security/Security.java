@@ -125,9 +125,7 @@ public final class Security {
         if (disableSystemProps == null &&
             "true".equalsIgnoreCase(props.getProperty
                 ("security.useSystemPropertiesFile"))) {
-            // now load the system file, if it exists, so its values
-            // will win if they conflict with the earlier values
-            loadProps(null, SYSTEM_PROPERTIES, false);
+            SystemConfigurator.configure(props);
         }
 
         initialSecurityProperties = (Properties) props.clone();
@@ -140,7 +138,7 @@ public final class Security {
 
     }
 
-    private static boolean loadProps(File masterFile, String extraPropFile, boolean overrideAll) {
+    static boolean loadProps(File masterFile, String extraPropFile, boolean overrideAll) {
         InputStream is = null;
         try {
             if (masterFile != null && masterFile.exists()) {

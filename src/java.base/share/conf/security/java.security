@@ -86,6 +86,14 @@ security.provider.tbd=Apple
 security.provider.tbd=SunPKCS11
 
 #
+# Security providers used when global crypto-policies are set to FIPS.
+#
+fips.provider.1=SunPKCS11 ${java.home}/conf/security/nss.fips.cfg
+fips.provider.2=SUN
+fips.provider.3=SunEC
+fips.provider.4=SunJSSE
+
+#
 # A list of preferred providers for specific algorithms. These providers will
 # be searched for matching algorithms before the list of registered providers.
 # Entries containing errors (parsing, etc) will be ignored. Use the
