@@ -35,6 +35,7 @@ m4_include([lib-std.m4])
 m4_include([lib-x11.m4])
 
 m4_include([lib-tests.m4])
+m4_include([lib-sysconf.m4])
 
 ################################################################################
 # Determine which libraries are needed for this configuration
@@ -134,6 +135,7 @@ AC_DEFUN_ONCE([LIB_SETUP_LIBRARIES],
   LIB_SETUP_X11
 
   LIB_TESTS_SETUP_GTEST
+  LIB_SETUP_SYSCONF_LIBS
 
   BASIC_JDKLIB_LIBS=""
   BASIC_JDKLIB_LIBS_TARGET=""
