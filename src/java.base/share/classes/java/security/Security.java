@@ -110,13 +110,6 @@ public final class Security {
         }
 
         if ("true".equalsIgnoreCase(props.getProperty
-                ("security.useSystemPropertiesFile"))) {
-            // now load the system file, if it exists, so its values
-            // will win if they conflict with the earlier values
-	    loadProps(null, SYSTEM_PROPERTIES, false);
-        }
-
-        if ("true".equalsIgnoreCase(props.getProperty
                 ("security.overridePropertiesFile"))) {
 
             String extraPropFile = System.getProperty
@@ -127,6 +120,16 @@ public final class Security {
             }
             loadProps(null, extraPropFile, overrideAll);
         }
+
+        String disableSystemProps = System.getProperty("java.security.disableSystemPropertiesFile");
+        if (disableSystemProps == null &&
+            "true".equalsIgnoreCase(props.getProperty
+                ("security.useSystemPropertiesFile"))) {
+            // now load the system file, if it exists, so its values
+            // will win if they conflict with the earlier values
+            loadProps(null, SYSTEM_PROPERTIES, false);
+        }
+
         initialSecurityProperties = (Properties) props.clone();
         if (sdebug != null) {
             for (String key : props.stringPropertyNames()) {
