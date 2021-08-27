@@ -42,6 +42,7 @@ import javax.security.auth.callback.PasswordCallback;
 
 import com.sun.crypto.provider.ChaCha20Poly1305Parameters;
 
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.InnocuousThread;
 import sun.security.util.Debug;
 import sun.security.util.ResourcesMgr;
@@ -64,6 +65,9 @@ public final class SunPKCS11 extends AuthProvider {
 
     @Serial
     private static final long serialVersionUID = -1354835039035306505L;
+
+    private static final boolean systemFipsEnabled = SharedSecrets
+            .getJavaSecuritySystemConfiguratorAccess().isSystemFipsEnabled();
 
     static final Debug debug = Debug.getInstance("sunpkcs11");
     // the PKCS11 object through which we make the native calls
@@ -382,6 +386,24 @@ public final class SunPKCS11 extends AuthProvider {
             initToken(slotInfo);
             if (nssModule != null) {
                 nssModule.setProvider(this);
+            }
+            if (systemFipsEnabled) {
+                // The NSS Software Token in FIPS 140-2 mode requires a user
+                // login for most operations. See sftk_fipsCheck. The NSS DB
+                // (/etc/pki/nssdb) PIN is empty.
+                Session session = null;
+                try {
+                    session = token.getOpSession();
+                    p11.C_Login(session.id(), CKU_USER, new char[] {});
+                } catch (PKCS11Exception p11e) {
+                    if (debug != null) {
+                        debug.println("Error during token login: " +
+                                p11e.getMessage());
+                    }
+                    throw p11e;
+                } finally {
+                    token.releaseSession(session);
+                }
             }
         } catch (Exception e) {
             if (config.getHandleStartupErrors() == Config.ERR_IGNORE_ALL) {
