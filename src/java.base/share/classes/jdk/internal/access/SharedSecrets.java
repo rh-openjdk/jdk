@@ -87,6 +87,7 @@ public class SharedSecrets {
     private static JavaSecuritySpecAccess javaSecuritySpecAccess;
     private static JavaxCryptoSealedObjectAccess javaxCryptoSealedObjectAccess;
     private static JavaxCryptoSpecAccess javaxCryptoSpecAccess;
+    private static JavaSecuritySystemConfiguratorAccess javaSecuritySystemConfiguratorAccess;
 
     public static void setJavaUtilCollectionAccess(JavaUtilCollectionAccess juca) {
         javaUtilCollectionAccess = juca;
@@ -497,5 +498,13 @@ public class SharedSecrets {
         try {
             MethodHandles.lookup().ensureInitialized(c);
         } catch (IllegalAccessException e) {}
+    }
+
+    public static void setJavaSecuritySystemConfiguratorAccess(JavaSecuritySystemConfiguratorAccess jssca) {
+        javaSecuritySystemConfiguratorAccess = jssca;
+    }
+
+    public static JavaSecuritySystemConfiguratorAccess getJavaSecuritySystemConfiguratorAccess() {
+        return javaSecuritySystemConfiguratorAccess;
     }
 }

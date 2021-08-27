@@ -32,6 +32,7 @@ import java.security.cert.*;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.net.ssl.*;
+import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetPropertyAction;
 import sun.security.provider.certpath.AlgorithmChecker;
 import sun.security.validator.Validator;
@@ -536,22 +537,40 @@ public abstract class SSLContextImpl extends SSLContextSpi {
         private static final List<CipherSuite> serverDefaultCipherSuites;
 
         static {
-            supportedProtocols = Arrays.asList(
-                ProtocolVersion.TLS13,
-                ProtocolVersion.TLS12,
-                ProtocolVersion.TLS11,
-                ProtocolVersion.TLS10,
-                ProtocolVersion.SSL30,
-                ProtocolVersion.SSL20Hello
-            );
+            if (SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
+                    .isSystemFipsEnabled()) {
+                // RH1860986: TLSv1.3 key derivation not supported with
+                // the Security Providers available in system FIPS mode.
+                supportedProtocols = Arrays.asList(
+                    ProtocolVersion.TLS12,
+                    ProtocolVersion.TLS11,
+                    ProtocolVersion.TLS10
+                );
 
-            serverDefaultProtocols = getAvailableProtocols(
-                    new ProtocolVersion[] {
-                ProtocolVersion.TLS13,
-                ProtocolVersion.TLS12,
-                ProtocolVersion.TLS11,
-                ProtocolVersion.TLS10
-            });
+                serverDefaultProtocols = getAvailableProtocols(
+                        new ProtocolVersion[] {
+                    ProtocolVersion.TLS12,
+                    ProtocolVersion.TLS11,
+                    ProtocolVersion.TLS10
+                });
+            } else {
+                supportedProtocols = Arrays.asList(
+                    ProtocolVersion.TLS13,
+                    ProtocolVersion.TLS12,
+                    ProtocolVersion.TLS11,
+                    ProtocolVersion.TLS10,
+                    ProtocolVersion.SSL30,
+                    ProtocolVersion.SSL20Hello
+                );
+
+                serverDefaultProtocols = getAvailableProtocols(
+                        new ProtocolVersion[] {
+                    ProtocolVersion.TLS13,
+                    ProtocolVersion.TLS12,
+                    ProtocolVersion.TLS11,
+                    ProtocolVersion.TLS10
+                });
+            }
 
             supportedCipherSuites = getApplicableSupportedCipherSuites(
                     supportedProtocols);
@@ -842,12 +861,23 @@ public abstract class SSLContextImpl extends SSLContextSpi {
             ProtocolVersion[] candidates;
             if (refactored.isEmpty()) {
                 // Client and server use the same default protocols.
-                candidates = new ProtocolVersion[] {
-                        ProtocolVersion.TLS13,
-                        ProtocolVersion.TLS12,
-                        ProtocolVersion.TLS11,
-                        ProtocolVersion.TLS10
-                    };
+                if (SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
+                        .isSystemFipsEnabled()) {
+                    // RH1860986: TLSv1.3 key derivation not supported with
+                    // the Security Providers available in system FIPS mode.
+                    candidates = new ProtocolVersion[] {
+                            ProtocolVersion.TLS12,
+                            ProtocolVersion.TLS11,
+                            ProtocolVersion.TLS10
+                        };
+                } else {
+                    candidates = new ProtocolVersion[] {
+                            ProtocolVersion.TLS13,
+                            ProtocolVersion.TLS12,
+                            ProtocolVersion.TLS11,
+                            ProtocolVersion.TLS10
+                        };
+                }
             } else {
                 // Use the customized TLS protocols.
                 candidates =
