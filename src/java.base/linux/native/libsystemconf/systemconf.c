@@ -34,14 +34,34 @@
 
 #include "java_security_SystemConfigurator.h"
 
-#define FIPS_ENABLED_PATH "/proc/sys/crypto/fips_enabled"
 #define MSG_MAX_SIZE 96
 
 static jmethodID debugPrintlnMethodID = NULL;
 static jobject debugObj = NULL;
 
-static void throwIOException(JNIEnv *env, const char *msg);
-static void dbgPrint(JNIEnv *env, const char* msg);
+// Only used when NSS is unavailable and FIPS_ENABLED_PATH is read
+#ifndef SYSCONF_NSS
+
+#define FIPS_ENABLED_PATH "/proc/sys/crypto/fips_enabled"
+
+static void throwIOException(JNIEnv *env, const char *msg)
+{
+    jclass cls = (*env)->FindClass(env, "java/io/IOException");
+    if (cls != 0)
+        (*env)->ThrowNew(env, cls, msg);
+}
+
+#endif
+
+static void dbgPrint(JNIEnv *env, const char* msg)
+{
+    jstring jMsg;
+    if (debugObj != NULL) {
+        jMsg = (*env)->NewStringUTF(env, msg);
+        CHECK_NULL(jMsg);
+        (*env)->CallVoidMethod(env, debugObj, debugPrintlnMethodID, jMsg);
+    }
+}
 
 /*
  * Class:     java_security_SystemConfigurator
@@ -148,21 +168,4 @@ JNIEXPORT jboolean JNICALL Java_java_security_SystemConfigurator_getSystemFIPSEn
     return (fips_enabled == '1' ? JNI_TRUE : JNI_FALSE);
 
 #endif // SYSCONF_NSS
-}
-
-static void throwIOException(JNIEnv *env, const char *msg)
-{
-    jclass cls = (*env)->FindClass(env, "java/io/IOException");
-    if (cls != 0)
-        (*env)->ThrowNew(env, cls, msg);
-}
-
-static void dbgPrint(JNIEnv *env, const char* msg)
-{
-    jstring jMsg;
-    if (debugObj != NULL) {
-        jMsg = (*env)->NewStringUTF(env, msg);
-        CHECK_NULL(jMsg);
-        (*env)->CallVoidMethod(env, debugObj, debugPrintlnMethodID, jMsg);
-    }
 }
