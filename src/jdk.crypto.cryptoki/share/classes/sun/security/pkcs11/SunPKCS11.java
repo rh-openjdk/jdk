@@ -26,6 +26,9 @@
 package sun.security.pkcs11;
 
 import java.io.*;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.util.*;
 
 import java.security.*;
@@ -68,6 +71,26 @@ public final class SunPKCS11 extends AuthProvider {
 
     private static final boolean systemFipsEnabled = SharedSecrets
             .getJavaSecuritySystemConfiguratorAccess().isSystemFipsEnabled();
+
+    private static final boolean plainKeySupportEnabled = SharedSecrets
+            .getJavaSecuritySystemConfiguratorAccess().isPlainKeySupportEnabled();
+
+    private static final MethodHandle fipsImportKey;
+    static {
+        MethodHandle fipsImportKeyTmp = null;
+        if (plainKeySupportEnabled) {
+            try {
+                fipsImportKeyTmp = MethodHandles.lookup().findStatic(
+                        FIPSKeyImporter.class, "importKey",
+                        MethodType.methodType(Long.class, SunPKCS11.class,
+                        long.class, CK_ATTRIBUTE[].class));
+            } catch (Throwable t) {
+                throw new SecurityException("FIPS key importer initialization" +
+                        " failed", t);
+            }
+        }
+        fipsImportKey = fipsImportKeyTmp;
+    }
 
     static final Debug debug = Debug.getInstance("sunpkcs11");
     // the PKCS11 object through which we make the native calls
@@ -329,9 +352,15 @@ public final class SunPKCS11 extends AuthProvider {
             // request multithreaded access first
             initArgs.flags = CKF_OS_LOCKING_OK;
             PKCS11 tmpPKCS11;
+            MethodHandle fipsKeyImporter = null;
+            if (plainKeySupportEnabled) {
+                fipsKeyImporter = MethodHandles.insertArguments(
+                        fipsImportKey, 0, this);
+            }
             try {
-                tmpPKCS11 = PKCS11.getInstance(library, functionList, initArgs,
-                    config.getOmitInitialize());
+                tmpPKCS11 = PKCS11.getInstance(
+                    library, functionList, initArgs,
+                    config.getOmitInitialize(), fipsKeyImporter);
             } catch (PKCS11Exception e) {
                 if (debug != null) {
                     debug.println("Multi-threaded initialization failed: " + e);
@@ -346,8 +375,8 @@ public final class SunPKCS11 extends AuthProvider {
                 } else {
                     initArgs.flags = 0;
                 }
-                tmpPKCS11 = PKCS11.getInstance(library, functionList, initArgs,
-                    config.getOmitInitialize());
+                tmpPKCS11 = PKCS11.getInstance(library,
+                    functionList, initArgs, config.getOmitInitialize(), fipsKeyImporter);
             }
             p11 = tmpPKCS11;
 

@@ -216,6 +216,14 @@ public class PKCS11Exception extends Exception {
     }
 
     /**
+     * No arguments constructor using CKR_GENERAL_ERROR for the error
+     * code with no extra info for the error message.
+     */
+    public PKCS11Exception() {
+        this(RV.CKR_GENERAL_ERROR.value, null);
+    }
+
+    /**
      * Constructor taking the error code (the CKR_* constants in PKCS#11) and
      * extra info for error message.
      */
