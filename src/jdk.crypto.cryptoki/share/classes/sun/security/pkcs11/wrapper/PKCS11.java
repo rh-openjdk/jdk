@@ -50,6 +50,8 @@ package sun.security.pkcs11.wrapper;
 import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.util.*;
 
 import java.security.AccessController;
@@ -153,25 +155,27 @@ public class PKCS11 {
 
     public static synchronized PKCS11 getInstance(String pkcs11ModulePath,
             String functionList, CK_C_INITIALIZE_ARGS pInitArgs,
-            boolean omitInitialize, MethodHandle fipsKeyImporter)
+            boolean omitInitialize, MethodHandle fipsKeyImporter,
+            MethodHandle fipsKeyExporter)
                     throws IOException, PKCS11Exception {
         // we may only call C_Initialize once per native .so/.dll
         // so keep a cache using the (non-canonicalized!) path
         PKCS11 pkcs11 = moduleMap.get(pkcs11ModulePath);
         if (pkcs11 == null) {
-            boolean nssFipsMode = fipsKeyImporter != null;
+            boolean nssFipsMode = fipsKeyImporter != null &&
+                    fipsKeyExporter != null;
             if ((pInitArgs != null)
                     && ((pInitArgs.flags & CKF_OS_LOCKING_OK) != 0)) {
                 if (nssFipsMode) {
                     pkcs11 = new FIPSPKCS11(pkcs11ModulePath, functionList,
-                            fipsKeyImporter);
+                            fipsKeyImporter, fipsKeyExporter);
                 } else {
                     pkcs11 = new PKCS11(pkcs11ModulePath, functionList);
                 }
             } else {
                 if (nssFipsMode) {
                     pkcs11 = new SynchronizedFIPSPKCS11(pkcs11ModulePath,
-                            functionList, fipsKeyImporter);
+                            functionList, fipsKeyImporter, fipsKeyExporter);
                 } else {
                     pkcs11 = new SynchronizedPKCS11(pkcs11ModulePath, functionList);
                 }
@@ -1930,13 +1934,29 @@ static class SynchronizedPKCS11 extends PKCS11 {
 // is enabled.
 static class FIPSPKCS11 extends PKCS11 {
     private MethodHandle fipsKeyImporter;
+    private MethodHandle fipsKeyExporter;
+    private MethodHandle hC_GetAttributeValue;
     FIPSPKCS11(String pkcs11ModulePath, String functionListName,
-            MethodHandle fipsKeyImporter) throws IOException {
+            MethodHandle fipsKeyImporter, MethodHandle fipsKeyExporter)
+                    throws IOException {
         super(pkcs11ModulePath, functionListName);
         this.fipsKeyImporter = fipsKeyImporter;
+        this.fipsKeyExporter = fipsKeyExporter;
+        try {
+            hC_GetAttributeValue = MethodHandles.insertArguments(
+                    MethodHandles.lookup().findSpecial(PKCS11.class,
+                            "C_GetAttributeValue", MethodType.methodType(
+                                    void.class, long.class, long.class,
+                                    CK_ATTRIBUTE[].class),
+                            FIPSPKCS11.class), 0, this);
+        } catch (Throwable t) {
+            throw new RuntimeException(
+                    "sun.security.pkcs11.wrapper.PKCS11" +
+                    "::C_GetAttributeValue method not found.", t);
+        }
     }
 
-    public synchronized long C_CreateObject(long hSession,
+    public long C_CreateObject(long hSession,
             CK_ATTRIBUTE[] pTemplate) throws PKCS11Exception {
         // Creating sensitive key objects from plain key material in a
         // FIPS-configured NSS Software Token is not allowed. We apply
@@ -1946,20 +1966,46 @@ static class FIPSPKCS11 extends PKCS11 {
                 return ((Long)fipsKeyImporter.invoke(hSession, pTemplate))
                         .longValue();
             } catch (Throwable t) {
-                throw new PKCS11Exception(CKR_GENERAL_ERROR);
+                if (t instanceof PKCS11Exception) {
+                    throw (PKCS11Exception)t;
+                }
+                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                        t.getMessage());
             }
         }
         return super.C_CreateObject(hSession, pTemplate);
+    }
+
+    public void C_GetAttributeValue(long hSession, long hObject,
+            CK_ATTRIBUTE[] pTemplate) throws PKCS11Exception {
+        FIPSPKCS11Helper.C_GetAttributeValue(hC_GetAttributeValue,
+                fipsKeyExporter, hSession, hObject, pTemplate);
     }
 }
 
 // FIPSPKCS11 synchronized counterpart.
 static class SynchronizedFIPSPKCS11 extends SynchronizedPKCS11 {
     private MethodHandle fipsKeyImporter;
+    private MethodHandle fipsKeyExporter;
+    private MethodHandle hC_GetAttributeValue;
     SynchronizedFIPSPKCS11(String pkcs11ModulePath, String functionListName,
-            MethodHandle fipsKeyImporter) throws IOException {
+            MethodHandle fipsKeyImporter, MethodHandle fipsKeyExporter)
+                    throws IOException {
         super(pkcs11ModulePath, functionListName);
         this.fipsKeyImporter = fipsKeyImporter;
+        this.fipsKeyExporter = fipsKeyExporter;
+        try {
+            hC_GetAttributeValue = MethodHandles.insertArguments(
+                    MethodHandles.lookup().findSpecial(SynchronizedPKCS11.class,
+                            "C_GetAttributeValue", MethodType.methodType(
+                                    void.class, long.class, long.class,
+                                    CK_ATTRIBUTE[].class),
+                            SynchronizedFIPSPKCS11.class), 0, this);
+        } catch (Throwable t) {
+            throw new RuntimeException(
+                    "sun.security.pkcs11.wrapper.SynchronizedPKCS11" +
+                    "::C_GetAttributeValue method not found.", t);
+        }
     }
 
     public synchronized long C_CreateObject(long hSession,
@@ -1970,10 +2016,20 @@ static class SynchronizedFIPSPKCS11 extends SynchronizedPKCS11 {
                 return ((Long)fipsKeyImporter.invoke(hSession, pTemplate))
                         .longValue();
             } catch (Throwable t) {
-                throw new PKCS11Exception(CKR_GENERAL_ERROR);
+                if (t instanceof PKCS11Exception) {
+                    throw (PKCS11Exception)t;
+                }
+                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                        t.getMessage());
             }
         }
         return super.C_CreateObject(hSession, pTemplate);
+    }
+
+    public synchronized void C_GetAttributeValue(long hSession, long hObject,
+            CK_ATTRIBUTE[] pTemplate) throws PKCS11Exception {
+        FIPSPKCS11Helper.C_GetAttributeValue(hC_GetAttributeValue,
+                fipsKeyExporter, hSession, hObject, pTemplate);
     }
 }
 
@@ -1987,6 +2043,71 @@ private static class FIPSPKCS11Helper {
             }
         }
         return false;
+    }
+    static void C_GetAttributeValue(MethodHandle hC_GetAttributeValue,
+            MethodHandle fipsKeyExporter, long hSession, long hObject,
+            CK_ATTRIBUTE[] pTemplate) throws PKCS11Exception {
+        Map<Long, CK_ATTRIBUTE> sensitiveAttrs = new HashMap<>();
+        List<CK_ATTRIBUTE> nonSensitiveAttrs = new LinkedList<>();
+        FIPSPKCS11Helper.getAttributesBySensitivity(pTemplate,
+                sensitiveAttrs, nonSensitiveAttrs);
+        try {
+            if (sensitiveAttrs.size() > 0) {
+                CK_ATTRIBUTE[] keyClsAttrs = new CK_ATTRIBUTE[] {
+                        new CK_ATTRIBUTE(CKA_CLASS)
+                };
+                hC_GetAttributeValue.invoke(hSession, hObject, keyClsAttrs);
+                long keyClass = keyClsAttrs[0].getLong();
+                if (keyClass == CKO_SECRET_KEY) {
+                    // If the key is a secret key, we can extract the
+                    // CKA_VALUE attribute with the FIPS Key Exporter.
+                    if (!sensitiveAttrs.containsKey(CKA_VALUE) ||
+                            sensitiveAttrs.size() > 1) {
+                        throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                " cannot get attribute values from" +
+                                " a CKO_SECRET_KEY key object");
+                    }
+                    CK_ATTRIBUTE[] keyValueAttrs = new CK_ATTRIBUTE[] {
+                            sensitiveAttrs.get(CKA_VALUE)
+                    };
+                    fipsKeyExporter.invoke(hSession, hObject, keyClass,
+                            keyValueAttrs);
+                    if (nonSensitiveAttrs.size() > 0) {
+                        CK_ATTRIBUTE[] pNonSensitiveAttrs =
+                                new CK_ATTRIBUTE[nonSensitiveAttrs.size()];
+                        int i = 0;
+                        for (CK_ATTRIBUTE nonSensitiveAttr : nonSensitiveAttrs) {
+                            pNonSensitiveAttrs[i++] = nonSensitiveAttr;
+                        }
+                        hC_GetAttributeValue.invoke(hSession, hObject,
+                                pNonSensitiveAttrs);
+                    }
+                    return;
+                }
+            }
+            hC_GetAttributeValue.invoke(hSession, hObject, pTemplate);
+        } catch (Throwable t) {
+            if (t instanceof PKCS11Exception) {
+                throw (PKCS11Exception)t;
+            }
+            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                    t.getMessage());
+        }
+    }
+    private static void getAttributesBySensitivity(CK_ATTRIBUTE[] pTemplate,
+            Map<Long, CK_ATTRIBUTE> sensitiveAttrs,
+            List<CK_ATTRIBUTE> nonSensitiveAttrs) {
+        for (CK_ATTRIBUTE attr : pTemplate) {
+            long type = attr.type;
+            if (type == CKA_VALUE || type == CKA_PRIVATE_EXPONENT ||
+                    type == CKA_PRIME_1 || type == CKA_PRIME_2 ||
+                    type == CKA_EXPONENT_1 || type == CKA_EXPONENT_2 ||
+                    type == CKA_COEFFICIENT) {
+                sensitiveAttrs.put(type, attr);
+            } else {
+                nonSensitiveAttrs.add(attr);
+            }
+        }
     }
 }
 }

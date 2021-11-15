@@ -220,14 +220,6 @@ public class PKCS11Exception extends Exception {
     }
 
     /**
-     * Constructor taking the error code (the CKR_* constants in PKCS#11) with
-     * no extra info for the error message.
-     */
-    public PKCS11Exception(long errorCode) {
-        this(errorCode, null);
-    }
-
-    /**
      * Constructor taking the error code (the CKR_* constants in PKCS#11) and
      * extra info for error message.
      */

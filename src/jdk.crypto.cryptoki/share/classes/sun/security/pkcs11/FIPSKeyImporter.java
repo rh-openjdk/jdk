@@ -34,6 +34,8 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 import javax.crypto.Cipher;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.DHPrivateKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 
@@ -53,15 +55,21 @@ final class FIPSKeyImporter {
     private static final Debug debug =
             Debug.getInstance("sunpkcs11");
 
-    private static P11Key importerKey = null;
+    private static volatile P11Key importerKey = null;
+    private static SecretKeySpec exporterKey = null;
+    private static volatile P11Key exporterKeyP11 = null;
     private static final ReentrantLock importerKeyLock = new ReentrantLock();
-    private static CK_MECHANISM importerKeyMechanism = null;
+    // Do not take the exporterKeyLock with the importerKeyLock held.
+    private static final ReentrantLock exporterKeyLock = new ReentrantLock();
+    private static volatile CK_MECHANISM importerKeyMechanism = null;
+    private static volatile CK_MECHANISM exporterKeyMechanism = null;
     private static Cipher importerCipher = null;
+    private static Cipher exporterCipher = null;
 
-    private static Provider sunECProvider = null;
+    private static volatile Provider sunECProvider = null;
     private static final ReentrantLock sunECProviderLock = new ReentrantLock();
 
-    private static KeyFactory DHKF = null;
+    private static volatile KeyFactory DHKF = null;
     private static final ReentrantLock DHKFLock = new ReentrantLock();
 
     static Long importKey(SunPKCS11 sunPKCS11, long hSession, CK_ATTRIBUTE[] attributes)
@@ -85,7 +93,8 @@ final class FIPSKeyImporter {
                             debug.println("Importer Key could not be" +
                                     " generated.");
                         }
-                        throw new PKCS11Exception(CKR_GENERAL_ERROR);
+                        throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                " fips key importer");
                     }
                     if (debug != null) {
                         debug.println("Importer Key successfully" +
@@ -213,7 +222,8 @@ final class FIPSKeyImporter {
                     if (debug != null) {
                         debug.println("Unrecognized private key type.");
                     }
-                    throw new PKCS11Exception(CKR_GENERAL_ERROR);
+                    throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                            " fips key importer");
                 }
             } else if (keyClass == CKO_SECRET_KEY) {
                 if (debug != null) {
@@ -226,14 +236,19 @@ final class FIPSKeyImporter {
                     debug.println("Private or secret key plain bytes could" +
                             " not be obtained. Import failed.");
                 }
-                throw new PKCS11Exception(CKR_GENERAL_ERROR);
+                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                        " fips key importer");
             }
-            importerCipher.init(Cipher.ENCRYPT_MODE, importerKey,
-                    new IvParameterSpec((byte[])importerKeyMechanism.pParameter),
-                    null);
             attributes = new CK_ATTRIBUTE[attrsMap.size()];
             attrsMap.values().toArray(attributes);
-            encKeyBytes = importerCipher.doFinal(keyBytes);
+            importerKeyLock.lock();
+            try {
+                // No need to reset the cipher object because no multi-part
+                // operations are performed.
+                encKeyBytes = importerCipher.doFinal(keyBytes);
+            } finally {
+                importerKeyLock.unlock();
+            }
             attributes = token.getAttributes(TemplateManager.O_IMPORT,
                     keyClass, keyType, attributes);
             keyID = token.p11.C_UnwrapKey(hSession,
@@ -242,11 +257,77 @@ final class FIPSKeyImporter {
                 debug.println("Imported key ID: " + keyID);
             }
         } catch (Throwable t) {
-            throw new PKCS11Exception(CKR_GENERAL_ERROR);
+            if (t instanceof PKCS11Exception) {
+                throw (PKCS11Exception)t;
+            }
+            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                    t.getMessage());
         } finally {
             importerKey.releaseKeyID();
         }
         return Long.valueOf(keyID);
+    }
+
+    static void exportKey(SunPKCS11 sunPKCS11, long hSession, long hObject,
+            long keyClass, CK_ATTRIBUTE[] attributes) throws PKCS11Exception {
+        Token token = sunPKCS11.getToken();
+        if (debug != null) {
+            debug.println("Private or Secret key will be exported in" +
+                    " system FIPS mode.");
+        }
+        if (exporterKeyP11 == null) {
+            try {
+                exporterKeyLock.lock();
+                if (exporterKeyP11 == null) {
+                    if (exporterKeyMechanism == null) {
+                        // Exporter Key creation has not been tried yet. Try it.
+                        createExporterKey(token);
+                    }
+                    if (exporterKeyP11 == null || exporterCipher == null) {
+                        if (debug != null) {
+                            debug.println("Exporter Key could not be" +
+                                    " generated.");
+                        }
+                        throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                " fips key exporter");
+                    }
+                    if (debug != null) {
+                        debug.println("Exporter Key successfully" +
+                                " generated.");
+                    }
+                }
+            } finally {
+                exporterKeyLock.unlock();
+            }
+        }
+        long exporterKeyID = exporterKeyP11.getKeyID();
+        try {
+            byte[] wrappedKeyBytes = token.p11.C_WrapKey(hSession,
+                    exporterKeyMechanism, exporterKeyID, hObject);
+            byte[] plainExportedKey = null;
+            exporterKeyLock.lock();
+            try {
+                // No need to reset the cipher object because no multi-part
+                // operations are performed.
+                plainExportedKey = exporterCipher.doFinal(wrappedKeyBytes);
+            } finally {
+                exporterKeyLock.unlock();
+            }
+            for (CK_ATTRIBUTE attr : attributes) {
+                if (keyClass == CKO_SECRET_KEY && attr.type == CKA_VALUE) {
+                    attr.pValue = plainExportedKey;
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            if (t instanceof PKCS11Exception) {
+                throw (PKCS11Exception)t;
+            }
+            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                    t.getMessage());
+        } finally {
+            exporterKeyP11.releaseKeyID();
+        }
     }
 
     private static void createImporterKey(Token token) {
@@ -279,6 +360,9 @@ final class FIPSKeyImporter {
             }
             if (importerKey != null) {
                 importerCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                importerCipher.init(Cipher.ENCRYPT_MODE, importerKey,
+                        new IvParameterSpec(
+                                (byte[])importerKeyMechanism.pParameter), null);
             }
         } catch (Throwable t) {
             // best effort
@@ -286,6 +370,41 @@ final class FIPSKeyImporter {
             importerCipher = null;
             // importerKeyMechanism value is kept initialized to indicate that
             // Importer Key creation has been tried and failed.
+            if (debug != null) {
+                debug.println("Error generating the Importer Key");
+            }
+        }
+    }
+
+    private static void createExporterKey(Token token) {
+        if (debug != null) {
+            debug.println("Generating Exporter Key...");
+        }
+        byte[] iv = new byte[16];
+        JCAUtil.getSecureRandom().nextBytes(iv);
+        exporterKeyMechanism = new CK_MECHANISM(CKM_AES_CBC_PAD, iv);
+        byte[] exporterKeyRaw = new byte[32];
+        JCAUtil.getSecureRandom().nextBytes(exporterKeyRaw);
+        exporterKey = new SecretKeySpec(exporterKeyRaw, "AES");
+        try {
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("AES");
+            exporterKeyP11 = (P11Key)(skf.translateKey(exporterKey));
+            if (exporterKeyP11 != null) {
+                exporterCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                exporterCipher.init(Cipher.DECRYPT_MODE, exporterKey,
+                        new IvParameterSpec(
+                                (byte[])exporterKeyMechanism.pParameter), null);
+            }
+        } catch (Throwable t) {
+            // best effort
+            exporterKey = null;
+            exporterKeyP11 = null;
+            exporterCipher = null;
+            // exporterKeyMechanism value is kept initialized to indicate that
+            // Exporter Key creation has been tried and failed.
+            if (debug != null) {
+                debug.println("Error generating the Exporter Key");
+            }
         }
     }
 }
