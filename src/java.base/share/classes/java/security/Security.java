@@ -63,10 +63,6 @@ public final class Security {
     private static final Debug sdebug =
                         Debug.getInstance("properties");
 
-    /* System property file*/
-    private static final String SYSTEM_PROPERTIES =
-        "/etc/crypto-policies/back-ends/java.config";
-
     /* The java.security properties */
     private static Properties props;
 
@@ -138,7 +134,20 @@ public final class Security {
         String disableSystemProps = System.getProperty("java.security.disableSystemPropertiesFile");
         if ((disableSystemProps == null || "false".equalsIgnoreCase(disableSystemProps)) &&
             "true".equalsIgnoreCase(props.getProperty("security.useSystemPropertiesFile"))) {
-            SystemConfigurator.configure(props);
+            if (!SystemConfigurator.configureSysProps(props)) {
+                if (sdebug != null) {
+                    sdebug.println("WARNING: System properties could not be loaded.");
+                }
+            }
+        }
+
+        boolean fipsEnabled = SystemConfigurator.configureFIPS(props);
+        if (sdebug != null) {
+            if (fipsEnabled) {
+                sdebug.println("FIPS support enabled.");
+            } else {
+                sdebug.println("FIPS support disabled.");
+            }
         }
 
         initialSecurityProperties = (Properties) props.clone();
