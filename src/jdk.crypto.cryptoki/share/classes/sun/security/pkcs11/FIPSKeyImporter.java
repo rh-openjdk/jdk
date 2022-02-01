@@ -29,6 +29,8 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.Provider;
 import java.security.Security;
+import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.RSAPrivateKey;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
@@ -313,11 +315,64 @@ final class FIPSKeyImporter {
             } finally {
                 exporterKeyLock.unlock();
             }
-            for (CK_ATTRIBUTE attr : attributes) {
-                if (keyClass == CKO_SECRET_KEY && attr.type == CKA_VALUE) {
-                    attr.pValue = plainExportedKey;
-                    break;
+            if (keyClass == CKO_PRIVATE_KEY) {
+                long keyType = 0L;
+                for (CK_ATTRIBUTE attr : attributes) {
+                    if (attr.type == CKA_KEY_TYPE) {
+                        keyType = attr.getLong();
+                    }
                 }
+                if (keyType == CKK_RSA) {
+                    RSAPrivateKey rsaKey = sun.security.rsa.RSAPrivateCrtKeyImpl.newKey(
+                            sun.security.rsa.RSAUtil.KeyType.RSA,
+                            "PKCS#8",
+                            plainExportedKey);
+                    for (CK_ATTRIBUTE attr : attributes) {
+                        if (attr.type == CKA_MODULUS) {
+                            attr.pValue = rsaKey.getModulus().toByteArray();
+                        } else if (attr.type == CKA_PRIVATE_EXPONENT) {
+                            attr.pValue = rsaKey.getPrivateExponent().toByteArray();
+                        }
+                    }
+                } else if (keyType == CKK_DSA) {
+                    sun.security.provider.DSAPrivateKey dsaKey =
+                            new sun.security.provider.DSAPrivateKey(plainExportedKey);
+                    for (CK_ATTRIBUTE attr : attributes) {
+                        if (attr.type == CKA_VALUE) {
+                            attr.pValue = dsaKey.getX().toByteArray();
+                        } else if (attr.type == CKA_PRIME) {
+                            attr.pValue = dsaKey.getParams().getP().toByteArray();
+                        } else if (attr.type == CKA_SUBPRIME) {
+                            attr.pValue = dsaKey.getParams().getQ().toByteArray();
+                        } else if (attr.type == CKA_BASE) {
+                            attr.pValue = dsaKey.getParams().getG().toByteArray();
+                        }
+                    }
+                } else if (keyType == CKK_EC) {
+                    ECPrivateKey ecKey =
+                            ECUtil.decodePKCS8ECPrivateKey(plainExportedKey);
+                    for (CK_ATTRIBUTE attr : attributes) {
+                        if (attr.type == CKA_VALUE) {
+                            attr.pValue = ecKey.getS().toByteArray();
+                        } else if (attr.type == CKA_EC_PARAMS) {
+                            attr.pValue = sun.security.util.CurveDB.lookup(
+                                    ecKey.getParams()).getEncoded();
+                        }
+                    }
+                } else {
+                    throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                            " fips key exporter");
+                }
+            } else if (keyClass == CKO_SECRET_KEY) {
+                for (CK_ATTRIBUTE attr : attributes) {
+                    if (attr.type == CKA_VALUE) {
+                        attr.pValue = plainExportedKey;
+                        break;
+                    }
+                }
+            } else {
+                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                        " fips key exporter");
             }
         } catch (Throwable t) {
             if (t instanceof PKCS11Exception) {

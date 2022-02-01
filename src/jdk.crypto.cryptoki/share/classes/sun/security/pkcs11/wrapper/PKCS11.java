@@ -2058,20 +2058,82 @@ private static class FIPSPKCS11Helper {
                 };
                 hC_GetAttributeValue.invoke(hSession, hObject, keyClsAttrs);
                 long keyClass = keyClsAttrs[0].getLong();
-                if (keyClass == CKO_SECRET_KEY) {
-                    // If the key is a secret key, we can extract the
-                    // CKA_VALUE attribute with the FIPS Key Exporter.
-                    if (!sensitiveAttrs.containsKey(CKA_VALUE) ||
-                            sensitiveAttrs.size() > 1) {
-                        throw new PKCS11Exception(CKR_GENERAL_ERROR,
-                                " cannot get attribute values from" +
-                                " a CKO_SECRET_KEY key object");
+                if (keyClass == CKO_SECRET_KEY || keyClass == CKO_PRIVATE_KEY) {
+                    if (keyClass == CKO_PRIVATE_KEY) {
+                        CK_ATTRIBUTE[] keyTypeAttrs = new CK_ATTRIBUTE[] {
+                                new CK_ATTRIBUTE(CKA_KEY_TYPE)
+                        };
+                        hC_GetAttributeValue.invoke(hSession, hObject, keyTypeAttrs);
+                        long keyType = keyTypeAttrs[0].getLong();
+                        if (keyType == CKK_RSA) {
+                            if (!(sensitiveAttrs.size() == 2 &&
+                                    sensitiveAttrs.containsKey(CKA_MODULUS) &&
+                                    sensitiveAttrs.containsKey(CKA_PRIVATE_EXPONENT))) {
+                                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                        " cannot get attribute values from" +
+                                        " a CKO_PRIVATE_KEY key object");
+                            }
+                            CK_ATTRIBUTE[] rsaAttrs = new CK_ATTRIBUTE[]{
+                                    new CK_ATTRIBUTE(CKA_KEY_TYPE, CKK_RSA),
+                                    sensitiveAttrs.get(CKA_MODULUS),
+                                    sensitiveAttrs.get(CKA_PRIVATE_EXPONENT)
+                            };
+                            fipsKeyExporter.invoke(hSession, hObject, keyClass,
+                                    rsaAttrs);
+                        } else if (keyType == CKK_DSA) {
+                            if (!(sensitiveAttrs.size() == 4 &&
+                                    sensitiveAttrs.containsKey(CKA_VALUE) &&
+                                    sensitiveAttrs.containsKey(CKA_PRIME) &&
+                                    sensitiveAttrs.containsKey(CKA_SUBPRIME) &&
+                                    sensitiveAttrs.containsKey(CKA_BASE))) {
+                                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                        " cannot get attribute values from" +
+                                        " a CKO_PRIVATE_KEY key object");
+                            }
+                            CK_ATTRIBUTE[] dsaAttrs = new CK_ATTRIBUTE[]{
+                                    new CK_ATTRIBUTE(CKA_KEY_TYPE, CKK_DSA),
+                                    sensitiveAttrs.get(CKA_VALUE),
+                                    sensitiveAttrs.get(CKA_PRIME),
+                                    sensitiveAttrs.get(CKA_SUBPRIME),
+                                    sensitiveAttrs.get(CKA_BASE)
+                            };
+                            fipsKeyExporter.invoke(hSession, hObject, keyClass,
+                                    dsaAttrs);
+                        } else if (keyType == CKK_EC) {
+                            if (!(sensitiveAttrs.size() == 2 &&
+                                    sensitiveAttrs.containsKey(CKA_VALUE) &&
+                                    sensitiveAttrs.containsKey(CKA_EC_PARAMS))) {
+                                throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                        " cannot get attribute values from" +
+                                        " a CKO_PRIVATE_KEY key object");
+                            }
+                            CK_ATTRIBUTE[] ecAttrs = new CK_ATTRIBUTE[]{
+                                    new CK_ATTRIBUTE(CKA_KEY_TYPE, CKK_EC),
+                                    sensitiveAttrs.get(CKA_VALUE),
+                                    sensitiveAttrs.get(CKA_EC_PARAMS)
+                            };
+                            fipsKeyExporter.invoke(hSession, hObject, keyClass,
+                                    ecAttrs);
+                        } else {
+                            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                    " cannot get attribute values from" +
+                                    " a CKO_PRIVATE_KEY key object");
+                        }
+                    } else if (keyClass == CKO_SECRET_KEY) {
+                        // If the key is a secret key, we can extract the
+                        // CKA_VALUE attribute with the FIPS Key Exporter.
+                        if (!sensitiveAttrs.containsKey(CKA_VALUE) ||
+                                sensitiveAttrs.size() > 1) {
+                            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                                    " cannot get attribute values from" +
+                                    " a CKO_SECRET_KEY key object");
+                        }
+                        CK_ATTRIBUTE[] keyValueAttrs = new CK_ATTRIBUTE[]{
+                                sensitiveAttrs.get(CKA_VALUE)
+                        };
+                        fipsKeyExporter.invoke(hSession, hObject, keyClass,
+                                keyValueAttrs);
                     }
-                    CK_ATTRIBUTE[] keyValueAttrs = new CK_ATTRIBUTE[] {
-                            sensitiveAttrs.get(CKA_VALUE)
-                    };
-                    fipsKeyExporter.invoke(hSession, hObject, keyClass,
-                            keyValueAttrs);
                     if (nonSensitiveAttrs.size() > 0) {
                         CK_ATTRIBUTE[] pNonSensitiveAttrs =
                                 new CK_ATTRIBUTE[nonSensitiveAttrs.size()];
@@ -2102,7 +2164,9 @@ private static class FIPSPKCS11Helper {
             if (type == CKA_VALUE || type == CKA_PRIVATE_EXPONENT ||
                     type == CKA_PRIME_1 || type == CKA_PRIME_2 ||
                     type == CKA_EXPONENT_1 || type == CKA_EXPONENT_2 ||
-                    type == CKA_COEFFICIENT) {
+                    type == CKA_COEFFICIENT || type == CKA_MODULUS ||
+                    type == CKA_PRIME || type == CKA_SUBPRIME ||
+                    type == CKA_BASE || type == CKA_EC_PARAMS) {
                 sensitiveAttrs.put(type, attr);
             } else {
                 nonSensitiveAttrs.add(attr);
