@@ -201,20 +201,22 @@ public final class SunEntries {
             String dsaKPGImplClass = "sun.security.provider.DSAKeyPairGenerator$";
             dsaKPGImplClass += (useLegacyDSA? "Legacy" : "Current");
             addWithAlias(p, "KeyPairGenerator", "DSA", dsaKPGImplClass, attrs);
+        }
 
-            /*
-             * Algorithm Parameter Generator engines
-             */
-            addWithAlias(p, "AlgorithmParameterGenerator", "DSA",
-                    "sun.security.provider.DSAParameterGenerator", attrs);
-            attrs.remove("KeySize");
+        /*
+         * Algorithm Parameter Generator engines
+         */
+        addWithAlias(p, "AlgorithmParameterGenerator", "DSA",
+                "sun.security.provider.DSAParameterGenerator", attrs);
+        attrs.remove("KeySize");
 
-            /*
-             * Algorithm Parameter engines
-             */
-            addWithAlias(p, "AlgorithmParameters", "DSA",
-                    "sun.security.provider.DSAParameters", attrs);
+        /*
+         * Algorithm Parameter engines
+         */
+        addWithAlias(p, "AlgorithmParameters", "DSA",
+                "sun.security.provider.DSAParameters", attrs);
 
+        if (!systemFipsEnabled) {
             /*
              * Key factories
              */

@@ -92,6 +92,8 @@ fips.provider.1=SunPKCS11 ${java.home}/conf/security/nss.fips.cfg
 fips.provider.2=SUN
 fips.provider.3=SunEC
 fips.provider.4=SunJSSE
+fips.provider.5=SunJCE
+fips.provider.6=SunRsaSign
 
 #
 # A list of preferred providers for specific algorithms. These providers will
