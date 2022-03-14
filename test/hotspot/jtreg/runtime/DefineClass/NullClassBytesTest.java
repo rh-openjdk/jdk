@@ -80,7 +80,10 @@ public class NullClassBytesTest {
         try {
             Class<?> b = Class.forName("B", true, ldr);
         } catch (ClassFormatError cfe) {
-            if (!cfe.getMessage().contains("Truncated class file")) {
+            String emsg = cfe.getMessage();
+            if (!emsg.contains("Truncated class file") &&
+                !emsg.contains("ClassLoader internal allocation failure"))
+            {
                 cfe.printStackTrace();
                 throw new RuntimeException("Wrong message");
             }

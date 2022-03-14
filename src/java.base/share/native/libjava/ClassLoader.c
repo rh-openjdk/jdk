@@ -23,6 +23,7 @@
  * questions.
  */
 
+#include <errno.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -88,7 +89,7 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
 
     if (data == NULL) {
         JNU_ThrowNullPointerException(env, 0);
-        return 0;
+        return NULL;
     }
 
     /* Work around 4153825. malloc crashes on Solaris when passed a
@@ -96,20 +97,25 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
      */
     if (length < 0) {
         JNU_ThrowArrayIndexOutOfBoundsException(env, 0);
-        return 0;
+        return NULL;
     }
 
     body = (jbyte *)malloc(length);
 
-    if (body == 0) {
-        JNU_ThrowOutOfMemoryError(env, 0);
-        return 0;
+    if (body == NULL) {
+        if (errno == ENOMEM) {
+            JNU_ThrowOutOfMemoryError(env, 0);
+        } else {
+            JNU_ThrowByName(env, "java/lang/ClassFormatError", "ClassLoader internal allocation failure");
+        }
+        return NULL;
     }
 
     (*env)->GetByteArrayRegion(env, data, offset, length, body);
 
-    if ((*env)->ExceptionOccurred(env))
+    if ((*env)->ExceptionOccurred(env)) {
         goto free_body;
+    }
 
     if (name != NULL) {
         utfName = getUTF(env, name, buf, sizeof(buf));
@@ -168,9 +174,9 @@ Java_java_lang_ClassLoader_defineClass2(JNIEnv *env,
 
     body = (*env)->GetDirectBufferAddress(env, data);
 
-    if (body == 0) {
+    if (body == NULL) {
         JNU_ThrowNullPointerException(env, 0);
-        return 0;
+        return NULL;
     }
 
     body += offset;
@@ -228,7 +234,7 @@ Java_java_lang_ClassLoader_defineClass0(JNIEnv *env,
 
     if (data == NULL) {
         JNU_ThrowNullPointerException(env, 0);
-        return 0;
+        return NULL;
     }
 
     /* Work around 4153825. malloc crashes on Solaris when passed a
@@ -236,13 +242,18 @@ Java_java_lang_ClassLoader_defineClass0(JNIEnv *env,
      */
     if (length < 0) {
         JNU_ThrowArrayIndexOutOfBoundsException(env, 0);
-        return 0;
+        return NULL;
     }
 
     body = (jbyte *)malloc(length);
-    if (body == 0) {
-        JNU_ThrowOutOfMemoryError(env, 0);
-        return 0;
+
+    if (body == NULL) {
+        if (errno == ENOMEM) {
+            JNU_ThrowOutOfMemoryError(env, 0);
+        } else {
+            JNU_ThrowByName(env, "java/lang/ClassFormatError", "ClassLoader internal allocation failed");
+        }
+        return NULL;
     }
 
     (*env)->GetByteArrayRegion(env, data, offset, length, body);
@@ -282,7 +293,7 @@ Java_java_lang_ClassLoader_findBootstrapClass(JNIEnv *env, jclass dummy,
     char buf[128];
 
     if (classname == NULL) {
-        return 0;
+        return NULL;
     }
 
     clname = getUTF(env, classname, buf, sizeof(buf));
@@ -311,7 +322,7 @@ Java_java_lang_ClassLoader_findLoadedClass0(JNIEnv *env, jobject loader,
                                            jstring name)
 {
     if (name == NULL) {
-        return 0;
+        return NULL;
     } else {
         return JVM_FindLoadedClass(env, loader, name);
     }
