@@ -46,6 +46,20 @@ Java_java_lang_ClassLoader_registerNatives(JNIEnv *env, jclass cls)
                             sizeof(methods)/sizeof(JNINativeMethod));
 }
 
+/*
+ *
+ */
+static void
+set_classloader_malloc_error(JNIEnv *env)
+{
+    if (errno == ENOMEM) {
+        JNU_ThrowOutOfMemoryError(env, 0);
+    } else {
+        JNU_ThrowByName(env, "java/lang/ClassFormatError", "ClassLoader internal allocation failure");
+    }
+}
+
+
 /* Convert java string to UTF char*. Use local buffer if possible,
    otherwise malloc new memory. Returns null IFF malloc failed. */
 static char*
@@ -58,7 +72,7 @@ getUTF(JNIEnv *env, jstring str, char* localBuf, int bufSize)
     if (len >= bufSize) {
         utfStr = malloc(len + 1);
         if (utfStr == NULL) {
-            JNU_ThrowOutOfMemoryError(env, NULL);
+            set_classloader_malloc_error(env);
             return NULL;
         }
     } else {
@@ -103,11 +117,7 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
     body = (jbyte *)malloc(length);
 
     if (body == NULL) {
-        if (errno == ENOMEM) {
-            JNU_ThrowOutOfMemoryError(env, 0);
-        } else {
-            JNU_ThrowByName(env, "java/lang/ClassFormatError", "ClassLoader internal allocation failure");
-        }
+        set_classloader_malloc_error(env);
         return NULL;
     }
 
@@ -184,7 +194,7 @@ Java_java_lang_ClassLoader_defineClass2(JNIEnv *env,
     if (name != NULL) {
         utfName = getUTF(env, name, buf, sizeof(buf));
         if (utfName == NULL) {
-            JNU_ThrowOutOfMemoryError(env, NULL);
+            set_classloader_malloc_error(env);
             return result;
         }
         fixClassname(utfName);
@@ -195,7 +205,7 @@ Java_java_lang_ClassLoader_defineClass2(JNIEnv *env,
     if (source != NULL) {
         utfSource = getUTF(env, source, sourceBuf, sizeof(sourceBuf));
         if (utfSource == NULL) {
-            JNU_ThrowOutOfMemoryError(env, NULL);
+            set_classloader_malloc_error(env);
             goto free_utfName;
         }
     } else {
@@ -248,11 +258,7 @@ Java_java_lang_ClassLoader_defineClass0(JNIEnv *env,
     body = (jbyte *)malloc(length);
 
     if (body == NULL) {
-        if (errno == ENOMEM) {
-            JNU_ThrowOutOfMemoryError(env, 0);
-        } else {
-            JNU_ThrowByName(env, "java/lang/ClassFormatError", "ClassLoader internal allocation failed");
-        }
+        set_classloader_malloc_error(env);
         return NULL;
     }
 
@@ -298,7 +304,7 @@ Java_java_lang_ClassLoader_findBootstrapClass(JNIEnv *env, jclass dummy,
 
     clname = getUTF(env, classname, buf, sizeof(buf));
     if (clname == NULL) {
-        JNU_ThrowOutOfMemoryError(env, NULL);
+        set_classloader_malloc_error(env);
         return NULL;
     }
     fixClassname(clname);
