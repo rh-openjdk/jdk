@@ -29,14 +29,17 @@ import java.nio.ByteBuffer;
 
 import java.security.*;
 import java.security.spec.AlgorithmParameterSpec;
+import java.security.spec.InvalidKeySpecException;
 
 import javax.crypto.MacSpi;
+import javax.crypto.spec.PBEKeySpec;
 
 import sun.nio.ch.DirectBuffer;
 
 import sun.security.pkcs11.wrapper.*;
 import static sun.security.pkcs11.wrapper.PKCS11Constants.*;
 import static sun.security.pkcs11.wrapper.PKCS11Exception.*;
+import sun.security.util.PBEUtil;
 
 /**
  * MAC implementation class. This class currently supports HMAC using
@@ -202,12 +205,23 @@ final class P11Mac extends MacSpi {
     // see JCE spec
     protected void engineInit(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
-        if (params != null) {
-            throw new InvalidAlgorithmParameterException
-                ("Parameters not supported");
+        if (algorithm.startsWith("HmacPBE")) {
+            PBEKeySpec pbeSpec = PBEUtil.getPBAKeySpec(key, params);
+            reset(true);
+            try {
+                p11Key = P11SecretKeyFactory.derivePBEKey(
+                        token, pbeSpec, algorithm);
+            } catch (InvalidKeySpecException e) {
+                throw new InvalidKeyException(e);
+            }
+        } else {
+            if (params != null) {
+                throw new InvalidAlgorithmParameterException
+                    ("Parameters not supported");
+            }
+            reset(true);
+            p11Key = P11SecretKeyFactory.convertKey(token, key, algorithm);
         }
-        reset(true);
-        p11Key = P11SecretKeyFactory.convertKey(token, key, algorithm);
         try {
             initialize();
         } catch (PKCS11Exception e) {

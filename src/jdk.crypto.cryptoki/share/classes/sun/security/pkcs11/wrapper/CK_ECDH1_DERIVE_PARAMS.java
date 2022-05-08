@@ -100,9 +100,9 @@ public class CK_ECDH1_DERIVE_PARAMS {
     }
 
     /**
-     * Returns the string representation of CK_PKCS5_PBKD2_PARAMS.
+     * Returns the string representation of CK_ECDH1_DERIVE_PARAMS.
      *
-     * @return the string representation of CK_PKCS5_PBKD2_PARAMS
+     * @return the string representation of CK_ECDH1_DERIVE_PARAMS
      */
     public String toString() {
         StringBuilder sb = new StringBuilder();

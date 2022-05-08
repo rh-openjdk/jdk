@@ -27,9 +27,10 @@ package com.sun.crypto.provider;
 
 import java.security.*;
 import java.security.spec.*;
-import java.util.Arrays;
 import javax.crypto.*;
 import javax.crypto.spec.*;
+
+import sun.security.util.PBEUtil;
 
 /**
  * This class represents password-based encryption as defined by the PKCS #5
@@ -54,9 +55,8 @@ abstract class PBES2Core extends CipherSpi {
     private final PBKDF2Core kdf;
     private final String pbeAlgo;
     private final String cipherAlgo;
-    private int iCount = DEFAULT_COUNT;
-    private byte[] salt = null;
-    private IvParameterSpec ivSpec = null;
+    private final PBEUtil.PBES2Helper pbes2Helper = new PBEUtil.PBES2Helper(
+            DEFAULT_SALT_LENGTH, DEFAULT_COUNT);
 
     /**
      * Creates an instance of PBE Scheme 2 according to the selected
@@ -129,32 +129,8 @@ abstract class PBES2Core extends CipherSpi {
     }
 
     protected AlgorithmParameters engineGetParameters() {
-        AlgorithmParameters params = null;
-        if (salt == null) {
-            // generate random salt and use default iteration count
-            salt = new byte[DEFAULT_SALT_LENGTH];
-            SunJCE.getRandom().nextBytes(salt);
-            iCount = DEFAULT_COUNT;
-        }
-        if (ivSpec == null) {
-            // generate random IV
-            byte[] ivBytes = new byte[blkSize];
-            SunJCE.getRandom().nextBytes(ivBytes);
-            ivSpec = new IvParameterSpec(ivBytes);
-        }
-        PBEParameterSpec pbeSpec = new PBEParameterSpec(salt, iCount, ivSpec);
-        try {
-            params = AlgorithmParameters.getInstance(pbeAlgo,
-                SunJCE.getInstance());
-            params.init(pbeSpec);
-        } catch (NoSuchAlgorithmException nsae) {
-            // should never happen
-            throw new RuntimeException("SunJCE called, but not configured");
-        } catch (InvalidParameterSpecException ipse) {
-            // should never happen
-            throw new RuntimeException("PBEParameterSpec not supported");
-        }
-        return params;
+        return pbes2Helper.getAlgorithmParameters(
+                blkSize, pbeAlgo, SunJCE.getInstance(), SunJCE.getRandom());
     }
 
     protected void engineInit(int opmode, Key key, SecureRandom random)
@@ -174,105 +150,8 @@ abstract class PBES2Core extends CipherSpi {
                               SecureRandom random)
         throws InvalidKeyException, InvalidAlgorithmParameterException {
 
-        if (key == null) {
-            throw new InvalidKeyException("Null key");
-        }
-
-        byte[] passwdBytes = key.getEncoded();
-        char[] passwdChars = null;
-        PBEKeySpec pbeSpec;
-        try {
-            if ((passwdBytes == null) ||
-                    !(key.getAlgorithm().regionMatches(true, 0, "PBE", 0, 3))) {
-                throw new InvalidKeyException("Missing password");
-            }
-
-            // TBD: consolidate the salt, ic and IV parameter checks below
-
-            // Extract salt and iteration count from the key, if present
-            if (key instanceof javax.crypto.interfaces.PBEKey) {
-                salt = ((javax.crypto.interfaces.PBEKey)key).getSalt();
-                if (salt != null && salt.length < 8) {
-                    throw new InvalidAlgorithmParameterException(
-                            "Salt must be at least 8 bytes long");
-                }
-                iCount = ((javax.crypto.interfaces.PBEKey)key).getIterationCount();
-                if (iCount == 0) {
-                    iCount = DEFAULT_COUNT;
-                } else if (iCount < 0) {
-                    throw new InvalidAlgorithmParameterException(
-                            "Iteration count must be a positive number");
-                }
-            }
-
-            // Extract salt, iteration count and IV from the params, if present
-            if (params == null) {
-                if (salt == null) {
-                    // generate random salt and use default iteration count
-                    salt = new byte[DEFAULT_SALT_LENGTH];
-                    random.nextBytes(salt);
-                    iCount = DEFAULT_COUNT;
-                }
-                if ((opmode == Cipher.ENCRYPT_MODE) ||
-                        (opmode == Cipher.WRAP_MODE)) {
-                    // generate random IV
-                    byte[] ivBytes = new byte[blkSize];
-                    random.nextBytes(ivBytes);
-                    ivSpec = new IvParameterSpec(ivBytes);
-                }
-            } else {
-                if (!(params instanceof PBEParameterSpec)) {
-                    throw new InvalidAlgorithmParameterException
-                            ("Wrong parameter type: PBE expected");
-                }
-                // salt and iteration count from the params take precedence
-                byte[] specSalt = ((PBEParameterSpec) params).getSalt();
-                if (specSalt != null && specSalt.length < 8) {
-                    throw new InvalidAlgorithmParameterException(
-                            "Salt must be at least 8 bytes long");
-                }
-                salt = specSalt;
-                int specICount = ((PBEParameterSpec) params).getIterationCount();
-                if (specICount == 0) {
-                    specICount = DEFAULT_COUNT;
-                } else if (specICount < 0) {
-                    throw new InvalidAlgorithmParameterException(
-                            "Iteration count must be a positive number");
-                }
-                iCount = specICount;
-
-                AlgorithmParameterSpec specParams =
-                        ((PBEParameterSpec) params).getParameterSpec();
-                if (specParams != null) {
-                    if (specParams instanceof IvParameterSpec) {
-                        ivSpec = (IvParameterSpec)specParams;
-                    } else {
-                        throw new InvalidAlgorithmParameterException(
-                                "Wrong parameter type: IV expected");
-                    }
-                } else if ((opmode == Cipher.ENCRYPT_MODE) ||
-                        (opmode == Cipher.WRAP_MODE)) {
-                    // generate random IV
-                    byte[] ivBytes = new byte[blkSize];
-                    random.nextBytes(ivBytes);
-                    ivSpec = new IvParameterSpec(ivBytes);
-                } else {
-                    throw new InvalidAlgorithmParameterException(
-                            "Missing parameter type: IV expected");
-                }
-            }
-
-            passwdChars = new char[passwdBytes.length];
-            for (int i = 0; i < passwdChars.length; i++)
-                passwdChars[i] = (char) (passwdBytes[i] & 0x7f);
-
-            pbeSpec = new PBEKeySpec(passwdChars, salt, iCount, keyLength);
-            // password char[] was cloned in PBEKeySpec constructor,
-            // so we can zero it out here
-        } finally {
-            if (passwdChars != null) Arrays.fill(passwdChars, '\0');
-            if (passwdBytes != null) Arrays.fill(passwdBytes, (byte)0x00);
-        }
+        PBEKeySpec pbeSpec = pbes2Helper.getPBEKeySpec(blkSize, keyLength,
+                opmode, key, params, random);
 
         PBKDF2KeyImpl s;
 
@@ -291,22 +170,14 @@ abstract class PBES2Core extends CipherSpi {
         SecretKeySpec cipherKey = new SecretKeySpec(derivedKey, cipherAlgo);
 
         // initialize the underlying cipher
-        cipher.init(opmode, cipherKey, ivSpec, random);
+        cipher.init(opmode, cipherKey, pbes2Helper.getIvSpec(), random);
     }
 
     protected void engineInit(int opmode, Key key, AlgorithmParameters params,
                               SecureRandom random)
         throws InvalidKeyException, InvalidAlgorithmParameterException {
-        AlgorithmParameterSpec pbeSpec = null;
-        if (params != null) {
-            try {
-                pbeSpec = params.getParameterSpec(PBEParameterSpec.class);
-            } catch (InvalidParameterSpecException ipse) {
-                throw new InvalidAlgorithmParameterException(
-                    "Wrong parameter type: PBE expected");
-            }
-        }
-        engineInit(opmode, key, pbeSpec, random);
+        engineInit(opmode, key, PBEUtil.PBES2Helper.getParameterSpec(params),
+                random);
     }
 
     protected byte[] engineUpdate(byte[] input, int inputOffset, int inputLen) {

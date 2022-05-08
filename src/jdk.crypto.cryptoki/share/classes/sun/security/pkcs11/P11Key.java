@@ -141,9 +141,7 @@ abstract class P11Key implements Key, Length {
         this.tokenObject = tokenObject;
         this.sensitive = sensitive;
         this.extractable = extractable;
-        char[] tokenLabel = this.token.tokenInfo.label;
-        boolean isNSS = (tokenLabel[0] == 'N' && tokenLabel[1] == 'S'
-                && tokenLabel[2] == 'S');
+        boolean isNSS = P11Util.isNSS(this.token);
         boolean extractKeyInfo = (!DISABLE_NATIVE_KEYS_EXTRACTION && isNSS &&
                 extractable && !tokenObject);
         this.keyIDHolder = new NativeKeyHolder(this, keyID, session,

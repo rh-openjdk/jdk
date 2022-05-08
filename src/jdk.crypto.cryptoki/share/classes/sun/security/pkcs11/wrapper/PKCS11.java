@@ -116,6 +116,8 @@ public class PKCS11 {
 
     private long pNativeData;
 
+    private CK_INFO pInfo;
+
     /**
      * This method does the initialization of the native library. It is called
      * exactly once for this class.
@@ -148,9 +150,10 @@ public class PKCS11 {
      * @postconditions
      */
     PKCS11(String pkcs11ModulePath, String functionListName)
-            throws IOException {
+            throws IOException, PKCS11Exception {
         connect(pkcs11ModulePath, functionListName);
         this.pkcs11ModulePath = pkcs11ModulePath;
+        pInfo = C_GetInfo();
     }
 
     /*
@@ -205,6 +208,14 @@ public class PKCS11 {
             moduleMap.put(pkcs11ModulePath, pkcs11);
         }
         return pkcs11;
+    }
+
+    /**
+     * Returns the CK_INFO structure fetched at initialization with
+     * C_GetInfo. This structure represent Cryptoki library information.
+     */
+    public CK_INFO getInfo() {
+        return pInfo;
     }
 
     /**
@@ -1653,7 +1664,7 @@ public class PKCS11 {
 static class SynchronizedPKCS11 extends PKCS11 {
 
     SynchronizedPKCS11(String pkcs11ModulePath, String functionListName)
-            throws IOException {
+            throws IOException, PKCS11Exception {
         super(pkcs11ModulePath, functionListName);
     }
 
@@ -1949,7 +1960,7 @@ static class FIPSPKCS11 extends PKCS11 {
     private MethodHandle hC_GetAttributeValue;
     FIPSPKCS11(String pkcs11ModulePath, String functionListName,
             MethodHandle fipsKeyImporter, MethodHandle fipsKeyExporter)
-                    throws IOException {
+                    throws IOException, PKCS11Exception {
         super(pkcs11ModulePath, functionListName);
         this.fipsKeyImporter = fipsKeyImporter;
         this.fipsKeyExporter = fipsKeyExporter;
@@ -2001,7 +2012,7 @@ static class SynchronizedFIPSPKCS11 extends SynchronizedPKCS11 {
     private MethodHandle hC_GetAttributeValue;
     SynchronizedFIPSPKCS11(String pkcs11ModulePath, String functionListName,
             MethodHandle fipsKeyImporter, MethodHandle fipsKeyExporter)
-                    throws IOException {
+                    throws IOException, PKCS11Exception {
         super(pkcs11ModulePath, functionListName);
         this.fipsKeyImporter = fipsKeyImporter;
         this.fipsKeyExporter = fipsKeyExporter;

@@ -31,6 +31,7 @@ import java.security.*;
 import java.security.spec.*;
 
 import javax.crypto.*;
+import javax.crypto.interfaces.PBEKey;
 import javax.crypto.spec.*;
 
 import static sun.security.pkcs11.TemplateManager.*;
@@ -193,6 +194,128 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
         return p11Key;
     }
 
+    static P11Key derivePBEKey(Token token, PBEKeySpec keySpec, String algo)
+            throws InvalidKeySpecException {
+        token.ensureValid();
+        if (keySpec == null) {
+            throw new InvalidKeySpecException("PBEKeySpec must not be null");
+        }
+        Session session = null;
+        try {
+            session = token.getObjSession();
+            P11Util.KDFData kdfData = P11Util.kdfDataMap.get(algo);
+            CK_MECHANISM ckMech;
+            char[] password = keySpec.getPassword();
+            byte[] salt = keySpec.getSalt();
+            int itCount = keySpec.getIterationCount();
+            int keySize = keySpec.getKeyLength();
+            if (kdfData.keyLen != -1) {
+                if (keySize == 0) {
+                    keySize = kdfData.keyLen;
+                } else if (keySize != kdfData.keyLen) {
+                    throw new InvalidKeySpecException(
+                            "Key length is invalid for " + algo);
+                }
+            }
+
+            if (kdfData.kdfMech == CKM_PKCS5_PBKD2) {
+                CK_VERSION p11Ver = token.p11.getInfo().cryptokiVersion;
+                if (P11Util.isNSS(token) || p11Ver.major < 2 ||
+                        p11Ver.major == 2 && p11Ver.minor < 40) {
+                    // NSS keeps using the old structure beyond PKCS #11 v2.40
+                    ckMech = new CK_MECHANISM(kdfData.kdfMech,
+                            new CK_PKCS5_PBKD2_PARAMS(password, salt,
+                                    itCount, kdfData.prfMech));
+                } else {
+                    ckMech = new CK_MECHANISM(kdfData.kdfMech,
+                            new CK_PKCS5_PBKD2_PARAMS2(password, salt,
+                                    itCount, kdfData.prfMech));
+                }
+            } else {
+                // PKCS #12 "General Method" PBKD (RFC 7292, Appendix B.2)
+                if (P11Util.isNSS(token)) {
+                    // According to PKCS #11, "password" in CK_PBE_PARAMS has
+                    // a CK_UTF8CHAR_PTR type. This suggests that it is encoded
+                    // in UTF-8. However, NSS expects the password to be encoded
+                    // as BMPString with a NULL terminator when C_GenerateKey
+                    // is called for a PKCS #12 "General Method" derivation
+                    // (see RFC 7292, Appendix B.1).
+                    //
+                    // The char size in Java is 2 bytes. When a char is
+                    // converted to a CK_UTF8CHAR, the high-order byte is
+                    // discarded (see jCharArrayToCKUTF8CharArray in
+                    // p11_util.c). In order to have a BMPString passed to
+                    // C_GenerateKey, we need to account for that and expand:
+                    // the high and low parts of each char are split into 2
+                    // chars. As an example, this is the transformation for
+                    // a NULL terminated password "a":
+                    // char[]    =>        [   0x0061,          0x0000     ]
+                    //                          /    \           /    \
+                    // Expansion =>       [0x0000, 0x0061, 0x0000, 0x0000]
+                    //                         |       |       |       |
+                    // BMPString =>       [  0x00,   0x61,   0x00,   0x00]
+                    //
+                    int inputLength = (password == null) ? 0 : password.length;
+                    char[] expPassword = new char[inputLength * 2 + 2];
+                    for (int i = 0, j = 0; i < inputLength; i++, j += 2) {
+                        expPassword[j] = (char) ((password[i] >>> 8) & 0xFF);
+                        expPassword[j + 1] = (char) (password[i] & 0xFF);
+                    }
+                    password = expPassword;
+                }
+                ckMech = new CK_MECHANISM(kdfData.kdfMech,
+                        new CK_PBE_PARAMS(password, salt, itCount));
+            }
+
+            long keyType = getKeyType(kdfData.keyAlgo);
+            CK_ATTRIBUTE[] attrs = new CK_ATTRIBUTE[
+                    switch (kdfData.op) {
+                        case ENCRYPTION, AUTHENTICATION -> 4;
+                        case GENERIC -> 5;
+                    }];
+            attrs[0] = new CK_ATTRIBUTE(CKA_CLASS, CKO_SECRET_KEY);
+            attrs[1] = new CK_ATTRIBUTE(CKA_VALUE_LEN, keySize >> 3);
+            attrs[2] = new CK_ATTRIBUTE(CKA_KEY_TYPE, keyType);
+            switch (kdfData.op) {
+                case ENCRYPTION -> attrs[3] = CK_ATTRIBUTE.ENCRYPT_TRUE;
+                case AUTHENTICATION -> attrs[3] = CK_ATTRIBUTE.SIGN_TRUE;
+                case GENERIC -> {
+                    attrs[3] = CK_ATTRIBUTE.ENCRYPT_TRUE;
+                    attrs[4] = CK_ATTRIBUTE.SIGN_TRUE;
+                }
+            }
+            CK_ATTRIBUTE[] attr = token.getAttributes(
+                    O_GENERATE, CKO_SECRET_KEY, keyType, attrs);
+            long keyID = token.p11.C_GenerateKey(session.id(), ckMech, attr);
+            return (P11Key)P11Key.secretKey(
+                    session, keyID, kdfData.keyAlgo, keySize, attr);
+        } catch (PKCS11Exception e) {
+            throw new InvalidKeySpecException("Could not create key", e);
+        } finally {
+            token.releaseSession(session);
+        }
+    }
+
+    static P11Key derivePBEKey(Token token, PBEKey key, String algo)
+            throws InvalidKeyException {
+        token.ensureValid();
+        if (key == null) {
+            throw new InvalidKeyException("PBEKey must not be null");
+        }
+        P11Key p11Key = token.secretCache.get(key);
+        if (p11Key != null) {
+            return p11Key;
+        }
+        try {
+            p11Key = derivePBEKey(token, new PBEKeySpec(key.getPassword(),
+                    key.getSalt(), key.getIterationCount()), algo);
+        } catch (InvalidKeySpecException e) {
+            throw new InvalidKeyException(e);
+        }
+        token.secretCache.put(key, p11Key);
+        return p11Key;
+    }
+
     static void fixDESParity(byte[] key, int offset) {
         for (int i = 0; i < 8; i++) {
             int b = key[offset] & 0xfe;
@@ -319,6 +442,9 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                 keySpec = new SecretKeySpec(keyBytes, "DESede");
                 return engineGenerateSecret(keySpec);
             }
+        } else if (keySpec instanceof PBEKeySpec) {
+            return (SecretKey)derivePBEKey(token,
+                    (PBEKeySpec)keySpec, algorithm);
         }
         throw new InvalidKeySpecException
                 ("Unsupported spec: " + keySpec.getClass().getName());
@@ -372,6 +498,9 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
     // see JCE spec
     protected SecretKey engineTranslateKey(SecretKey key)
             throws InvalidKeyException {
+        if (key instanceof PBEKey) {
+            return (SecretKey)derivePBEKey(token, (PBEKey)key, algorithm);
+        }
         return (SecretKey)convertKey(token, key, algorithm);
     }
 
