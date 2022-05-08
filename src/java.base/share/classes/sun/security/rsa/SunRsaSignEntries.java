@@ -65,10 +65,13 @@ public final class SunRsaSignEntries {
             attrs.put("SupportedKeyClasses",
                     "java.security.interfaces.RSAPublicKey" +
                     "|java.security.interfaces.RSAPrivateKey");
+        }
 
-            add(p, "KeyFactory", "RSA",
-                    "sun.security.rsa.RSAKeyFactory$Legacy",
-                    getAliases("PKCS1"), null);
+        add(p, "KeyFactory", "RSA",
+                "sun.security.rsa.RSAKeyFactory$Legacy",
+                getAliases("PKCS1"), null);
+
+        if (!systemFipsEnabled) {
             add(p, "KeyPairGenerator", "RSA",
                     "sun.security.rsa.RSAKeyPairGenerator$Legacy",
                     getAliases("PKCS1"), null);
@@ -98,9 +101,12 @@ public final class SunRsaSignEntries {
                    "sun.security.rsa.RSASignature$SHA3_384withRSA", attrs);
             addA(p, "Signature", "SHA3-512withRSA",
                     "sun.security.rsa.RSASignature$SHA3_512withRSA", attrs);
+        }
 
-            addA(p, "KeyFactory", "RSASSA-PSS",
-                    "sun.security.rsa.RSAKeyFactory$PSS", attrs);
+        addA(p, "KeyFactory", "RSASSA-PSS",
+                "sun.security.rsa.RSAKeyFactory$PSS", attrs);
+
+        if (!systemFipsEnabled) {
             addA(p, "KeyPairGenerator", "RSASSA-PSS",
                     "sun.security.rsa.RSAKeyPairGenerator$PSS", attrs);
             addA(p, "Signature", "RSASSA-PSS",

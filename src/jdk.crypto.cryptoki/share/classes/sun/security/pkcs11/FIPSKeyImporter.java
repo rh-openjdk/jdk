@@ -29,7 +29,7 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.Provider;
 import java.security.Security;
-import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.util.HashMap;
 import java.util.Map;
@@ -48,6 +48,8 @@ import sun.security.pkcs11.wrapper.CK_MECHANISM;
 import static sun.security.pkcs11.wrapper.PKCS11Constants.*;
 import static sun.security.pkcs11.wrapper.PKCS11Exception.*;
 import sun.security.pkcs11.wrapper.PKCS11Exception;
+import sun.security.rsa.RSAPrivateCrtKeyImpl;
+import sun.security.rsa.RSAUtil;
 import sun.security.rsa.RSAUtil.KeyType;
 import sun.security.util.Debug;
 import sun.security.util.ECUtil;
@@ -271,7 +273,8 @@ final class FIPSKeyImporter {
     }
 
     static void exportKey(SunPKCS11 sunPKCS11, long hSession, long hObject,
-            long keyClass, CK_ATTRIBUTE[] attributes) throws PKCS11Exception {
+            long keyClass, long keyType, Map<Long, CK_ATTRIBUTE> sensitiveAttrs)
+            throws PKCS11Exception {
         Token token = sunPKCS11.getToken();
         if (debug != null) {
             debug.println("Private or Secret key will be exported in" +
@@ -316,60 +319,12 @@ final class FIPSKeyImporter {
                 exporterKeyLock.unlock();
             }
             if (keyClass == CKO_PRIVATE_KEY) {
-                long keyType = 0L;
-                for (CK_ATTRIBUTE attr : attributes) {
-                    if (attr.type == CKA_KEY_TYPE) {
-                        keyType = attr.getLong();
-                    }
-                }
-                if (keyType == CKK_RSA) {
-                    RSAPrivateKey rsaKey = sun.security.rsa.RSAPrivateCrtKeyImpl.newKey(
-                            sun.security.rsa.RSAUtil.KeyType.RSA,
-                            "PKCS#8",
-                            plainExportedKey);
-                    for (CK_ATTRIBUTE attr : attributes) {
-                        if (attr.type == CKA_MODULUS) {
-                            attr.pValue = rsaKey.getModulus().toByteArray();
-                        } else if (attr.type == CKA_PRIVATE_EXPONENT) {
-                            attr.pValue = rsaKey.getPrivateExponent().toByteArray();
-                        }
-                    }
-                } else if (keyType == CKK_DSA) {
-                    sun.security.provider.DSAPrivateKey dsaKey =
-                            new sun.security.provider.DSAPrivateKey(plainExportedKey);
-                    for (CK_ATTRIBUTE attr : attributes) {
-                        if (attr.type == CKA_VALUE) {
-                            attr.pValue = dsaKey.getX().toByteArray();
-                        } else if (attr.type == CKA_PRIME) {
-                            attr.pValue = dsaKey.getParams().getP().toByteArray();
-                        } else if (attr.type == CKA_SUBPRIME) {
-                            attr.pValue = dsaKey.getParams().getQ().toByteArray();
-                        } else if (attr.type == CKA_BASE) {
-                            attr.pValue = dsaKey.getParams().getG().toByteArray();
-                        }
-                    }
-                } else if (keyType == CKK_EC) {
-                    ECPrivateKey ecKey =
-                            ECUtil.decodePKCS8ECPrivateKey(plainExportedKey);
-                    for (CK_ATTRIBUTE attr : attributes) {
-                        if (attr.type == CKA_VALUE) {
-                            attr.pValue = ecKey.getS().toByteArray();
-                        } else if (attr.type == CKA_EC_PARAMS) {
-                            attr.pValue = sun.security.util.CurveDB.lookup(
-                                    ecKey.getParams()).getEncoded();
-                        }
-                    }
-                } else {
-                    throw new PKCS11Exception(CKR_GENERAL_ERROR,
-                            " fips key exporter");
-                }
+                exportPrivateKey(sensitiveAttrs, keyType, plainExportedKey);
             } else if (keyClass == CKO_SECRET_KEY) {
-                for (CK_ATTRIBUTE attr : attributes) {
-                    if (attr.type == CKA_VALUE) {
-                        attr.pValue = plainExportedKey;
-                        break;
-                    }
-                }
+                checkAttrs(sensitiveAttrs, "CKO_SECRET_KEY", CKA_VALUE);
+                // CKA_VALUE is guaranteed to be present, since sensitiveAttrs'
+                // size is greater than 0 and no invalid attributes exist
+                sensitiveAttrs.get(CKA_VALUE).pValue = plainExportedKey;
             } else {
                 throw new PKCS11Exception(CKR_GENERAL_ERROR,
                         " fips key exporter");
@@ -383,6 +338,76 @@ final class FIPSKeyImporter {
         } finally {
             exporterKeyP11.releaseKeyID();
         }
+    }
+
+    private static void exportPrivateKey(
+            Map<Long, CK_ATTRIBUTE> sensitiveAttrs, long keyType,
+            byte[] plainExportedKey) throws Throwable {
+        if (keyType == CKK_RSA) {
+            checkAttrs(sensitiveAttrs, "CKO_PRIVATE_KEY CKK_RSA",
+                    CKA_PRIVATE_EXPONENT, CKA_PRIME_1, CKA_PRIME_2,
+                    CKA_EXPONENT_1, CKA_EXPONENT_2, CKA_COEFFICIENT);
+            RSAPrivateKey rsaPKey = RSAPrivateCrtKeyImpl.newKey(
+                    RSAUtil.KeyType.RSA, "PKCS#8", plainExportedKey
+            );
+            CK_ATTRIBUTE attr;
+            if ((attr = sensitiveAttrs.get(CKA_PRIVATE_EXPONENT)) != null) {
+                attr.pValue = rsaPKey.getPrivateExponent().toByteArray();
+            }
+            if (rsaPKey instanceof RSAPrivateCrtKey) {
+                RSAPrivateCrtKey rsaPCrtKey = (RSAPrivateCrtKey) rsaPKey;
+                if ((attr = sensitiveAttrs.get(CKA_PRIME_1)) != null) {
+                    attr.pValue = rsaPCrtKey.getPrimeP().toByteArray();
+                }
+                if ((attr = sensitiveAttrs.get(CKA_PRIME_2)) != null) {
+                    attr.pValue = rsaPCrtKey.getPrimeQ().toByteArray();
+                }
+                if ((attr = sensitiveAttrs.get(CKA_EXPONENT_1)) != null) {
+                    attr.pValue = rsaPCrtKey.getPrimeExponentP().toByteArray();
+                }
+                if ((attr = sensitiveAttrs.get(CKA_EXPONENT_2)) != null) {
+                    attr.pValue = rsaPCrtKey.getPrimeExponentQ().toByteArray();
+                }
+                if ((attr = sensitiveAttrs.get(CKA_COEFFICIENT)) != null) {
+                    attr.pValue = rsaPCrtKey.getCrtCoefficient().toByteArray();
+                }
+            } else {
+                checkAttrs(sensitiveAttrs, "CKO_PRIVATE_KEY CKK_RSA",
+                        CKA_PRIVATE_EXPONENT);
+            }
+        } else if (keyType == CKK_DSA) {
+            checkAttrs(sensitiveAttrs, "CKO_PRIVATE_KEY CKK_DSA", CKA_VALUE);
+            // CKA_VALUE is guaranteed to be present, since sensitiveAttrs'
+            // size is greater than 0 and no invalid attributes exist
+            sensitiveAttrs.get(CKA_VALUE).pValue =
+                    new sun.security.provider.DSAPrivateKey(plainExportedKey)
+                            .getX().toByteArray();
+        } else if (keyType == CKK_EC) {
+            checkAttrs(sensitiveAttrs, "CKO_PRIVATE_KEY CKK_EC", CKA_VALUE);
+            // CKA_VALUE is guaranteed to be present, since sensitiveAttrs'
+            // size is greater than 0 and no invalid attributes exist
+            sensitiveAttrs.get(CKA_VALUE).pValue =
+                    ECUtil.decodePKCS8ECPrivateKey(plainExportedKey)
+                            .getS().toByteArray();
+        } else {
+            throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                    " unsupported CKO_PRIVATE_KEY key type: " + keyType);
+        }
+    }
+
+    private static void checkAttrs(Map<Long, CK_ATTRIBUTE> sensitiveAttrs,
+                                     String keyName, long... validAttrs)
+            throws PKCS11Exception {
+        int sensitiveAttrsCount = sensitiveAttrs.size();
+        if (sensitiveAttrsCount <= validAttrs.length) {
+            int validAttrsCount = 0;
+            for (long validAttr : validAttrs) {
+                if (sensitiveAttrs.containsKey(validAttr)) validAttrsCount++;
+            }
+            if (validAttrsCount == sensitiveAttrsCount) return;
+        }
+        throw new PKCS11Exception(CKR_GENERAL_ERROR,
+                " invalid attribute types for a " + keyName + " key object");
     }
 
     private static void createImporterKey(Token token) {

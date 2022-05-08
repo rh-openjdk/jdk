@@ -86,8 +86,8 @@ public final class SunPKCS11 extends AuthProvider {
                 fipsExportKeyTmp = MethodHandles.lookup().findStatic(
                         FIPSKeyImporter.class, "exportKey",
                         MethodType.methodType(void.class, SunPKCS11.class,
-                        long.class, long.class, long.class,
-                        CK_ATTRIBUTE[].class));
+                        long.class, long.class,
+                        long.class, long.class, Map.class));
             } catch (Throwable t) {
                 throw new SecurityException("FIPS key importer-exporter" +
                         " initialization failed", t);
