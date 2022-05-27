@@ -1,0 +1,33 @@
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Codepage="1252" Id="*" Language="1033" Manufacturer="OpenJDK" Name="OpenJDK PLACEHOLDER_VERSION_NUMBER" UpgradeCode="00000000-0000-0000-0000-000000000000" Version="PLACEHOLDER_VERSION_NUMBER_FOUR_POSITIONS">
+
+        <Package Compressed="yes" InstallScope="perMachine" InstallerVersion="200" Languages="1033" Platform="x64" SummaryCodepage="1252"/>
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFiles64Folder">
+                <Directory Id="dir_vendor" Name="OpenJDK">
+                    <Directory Id="INSTALLDIR" Name="jdk-PLACEHOLDER_VERSION_FEATURE">
+                    </Directory>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <Icon Id="icon_resources_icon_ico" SourceFile="resources/icon.ico"/>
+
+        <MajorUpgrade AllowDowngrades="no" AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A later version of [ProductName] is already installed. Setup will now exit." IgnoreRemoveFailure="no"/>
+
+        <MediaTemplate EmbedCab="yes"/>
+
+        <Property Id="ARPHELPLINK" Value="https://openjdk.java.net"/>
+        <Property Id="ARPPRODUCTICON" Value="icon_resources_icon_ico"/>
+        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR"/>
+
+        <UIRef Id="WixUI_FeatureTree"/>
+        <UIRef Id="WixUI_ErrorProgressText"/>
+
+        <WixVariable Id="WixUILicenseRtf" Value="resources/LICENSE.rtf"/>
+        <WixVariable Id="WixUIBannerBmp" Value="resources/banner.bmp"/>
+        <WixVariable Id="WixUIDialogBmp" Value="resources/dialog.bmp"/>
+
+    </Product>
+</Wix>

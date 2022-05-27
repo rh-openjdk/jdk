@@ -34,6 +34,8 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.StandardCopyOption;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
+import static jdk.jpackage.test.WindowsHelper.queryRegistryValue;
+
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
@@ -277,7 +279,7 @@ final public class TKit {
 
     private final static String TEMP_FILE_PREFIX = null;
 
-    private static Path createUniqueFileName(String defaultName) {
+    static Path createUniqueFileName(String defaultName) {
         final String[] nameComponents;
 
         int separatorIdx = defaultName.lastIndexOf('.');
@@ -882,6 +884,18 @@ final public class TKit {
             return null;
         }
         return tokens.stream().collect(Collectors.toSet());
+    }
+
+    public static void assertRegistryValueEquals(String path, String key, String expected) {
+        String val = queryRegistryValue(path, key);
+        String msg = path + ":" + key;
+        TKit.assertNotNull(val, msg);
+        TKit.assertEquals(expected, val, msg);
+    }
+
+    public static void assertRegistryValueAbsent(String path, String key) {
+        String val = queryRegistryValue(path, key);
+        TKit.assertNull(val, path + ":" + key);
     }
 
     static final Path LOG_FILE = Functional.identity(() -> {

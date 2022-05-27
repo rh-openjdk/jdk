@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <?ifdef JpIsSystemWide ?>
+    <?define JpInstallScope="perMachine"?>
+  <?else?>
+    <?define JpInstallScope="perUser"?>
+  <?endif?>
+
+  <?define JpProductLanguage=1033 ?>
+  <?define JpInstallerVersion=200 ?>
+  <?define JpCompressedMsi=yes ?>
+
+  <?include $(var.JpConfigDir)/overrides.wxi ?>
+
+  <?ifdef JpAllowUpgrades ?>
+    <?define JpUpgradeVersionOnlyDetectUpgrade="no"?>
+  <?else?>
+    <?define JpUpgradeVersionOnlyDetectUpgrade="yes"?>
+  <?endif?>
+  <?ifdef JpAllowDowngrades ?>
+    <?define JpUpgradeVersionOnlyDetectDowngrade="no"?>
+  <?else?>
+    <?define JpUpgradeVersionOnlyDetectDowngrade="yes"?>
+  <?endif?>
+  <?ifndef JpProductName ?>
+    <?define JpProductName="$(var.JpAppName)"?>
+  <?endif?>
+
+  <Product
+    Id="$(var.JpProductCode)"
+    Name="$(var.JpProductName)"
+    Language="$(var.JpProductLanguage)"
+    Version="$(var.JpAppVersion)"
+    Manufacturer="$(var.JpAppVendor)"
+    UpgradeCode="$(var.JpProductUpgradeCode)">
+
+    <Package
+      Description="$(var.JpAppDescription)"
+      Manufacturer="$(var.JpAppVendor)"
+      InstallerVersion="$(var.JpInstallerVersion)"
+      Compressed="$(var.JpCompressedMsi)"
+      InstallScope="$(var.JpInstallScope)" Platform="x64"
+    />
+
+    <Media Id="1" Cabinet="Data.cab" EmbedCab="yes" />
+
+    <Upgrade Id="$(var.JpProductUpgradeCode)">
+      <UpgradeVersion
+        OnlyDetect="$(var.JpUpgradeVersionOnlyDetectUpgrade)"
+        Property="JP_UPGRADABLE_FOUND"
+        Maximum="$(var.JpAppVersion)"
+        MigrateFeatures="yes"
+        IncludeMaximum="$(var.JpUpgradeVersionOnlyDetectUpgrade)" />
+      <UpgradeVersion
+        OnlyDetect="$(var.JpUpgradeVersionOnlyDetectDowngrade)"
+        Property="JP_DOWNGRADABLE_FOUND"
+        Minimum="$(var.JpAppVersion)"
+        MigrateFeatures="yes"
+        IncludeMinimum="$(var.JpUpgradeVersionOnlyDetectDowngrade)" />
+    </Upgrade>
+
+    <?ifndef JpAllowUpgrades ?>
+    <CustomAction Id="JpDisallowUpgrade" Error="!(loc.DisallowUpgradeErrorMessage)" />
+    <?endif?>
+    <?ifndef JpAllowDowngrades ?>
+    <CustomAction Id="JpDisallowDowngrade" Error="!(loc.DowngradeErrorMessage)" />
+    <?endif?>
+
+    <!-- components begin -->
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryRuntimeCurrentVersionUuid)" Id="comp_registry_runtime_current_version" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_runtime_current_version" Key="Software\JavaSoft\JDK" Root="HKLM">
+        <RegistryValue Name="CurrentVersion" Type="string" Value="$(var.JpAppVersion)"/>
+      </RegistryKey>
+    </Component>
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryRuntimeJavaHomeUuid)" Id="comp_registry_runtime_java_home" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_runtime_java_home" Key="Software\JavaSoft\JDK\$(var.JpAppVersion)" Root="HKLM">
+        <RegistryValue Name="JavaHome" Type="string" Value="[INSTALLDIR]"/>
+      </RegistryKey>
+    </Component>
+
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompEnvPathUuid)" Id="comp_env_path" KeyPath="yes">
+      <Environment Action="set" Id="env_path" Name="PATH" Part="last" System="yes" Value="[INSTALLDIR]bin"/>
+    </Component>
+
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompEnvJavaHomeUuid)" Id="comp_env_java_home" KeyPath="yes">
+      <Environment Action="set" Id="env_java_home" Name="JAVA_HOME" Part="all" System="yes" Value="[INSTALLDIR]"/>
+    </Component>
+
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryJarContentTypeUuid)" Id="comp_registry_jar_content_type" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_jar_content_type" Key="SOFTWARE\Classes\.jar" Root="HKLM">
+        <RegistryValue Type="string" Value="JARFile"/>
+        <RegistryValue Name="Content Type" Type="string" Value="application/java-archive"/>
+      </RegistryKey>
+    </Component>
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryJarFileTypeUuid)" Id="comp_registry_jar_file_type" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_jar_file_type" Key="SOFTWARE\Classes\JARFile" Root="HKLM">
+        <RegistryValue Type="string" Value="JAR File"/>
+        <RegistryValue Name="EditFlags" Type="integer" Value="65536"/>
+      </RegistryKey>
+    </Component>
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryJarMenuUuid)" Id="comp_registry_jar_menu" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_jar_menu" Key="SOFTWARE\Classes\JARFile\Shell\Open" Root="HKLM">
+        <RegistryValue Type="string" Value="&amp;Launch with OpenJDK"/>
+      </RegistryKey>
+    </Component>
+    <Component Directory="INSTALLDIR" Guid="$(var.JpCompRegistryJarCmdUuid)" Id="comp_registry_jar_cmd" KeyPath="yes">
+      <RegistryKey ForceCreateOnInstall="yes" Id="registry_jar_cmd" Key="SOFTWARE\Classes\JARFile\Shell\Open\Command" Root="HKLM">
+        <RegistryValue Type="string" Value="&quot;[INSTALLDIR]bin\javaw.exe&quot; -jar &quot;%1&quot; %*"/>
+      </RegistryKey>
+    </Component>
+    <!-- components end -->
+
+    <!-- Standard required root -->
+    <Directory Id="TARGETDIR" Name="SourceDir"/>
+
+    <!-- features begin -->
+    <Feature Absent="disallow" AllowAdvertise="no" ConfigurableDirectory="INSTALLDIR" Description="$(var.JpFeatureJdkDescription)" Display="expand" Id="jdk" Level="1" Title="$(var.JpFeatureJdkTitle)">
+      <ComponentGroupRef Id="Files"/>
+
+      <Feature Absent="allow" AllowAdvertise="no" Description="$(var.JpFeatureJdkRegistryRuntimeDescription)" Id="jdk_registry_runtime" Level="1" Title="$(var.JpFeatureJdkRegistryRuntimeTitle)">
+        <ComponentRef Id="comp_registry_runtime_current_version"/>
+        <ComponentRef Id="comp_registry_runtime_java_home"/>
+      </Feature>
+
+      <Feature Absent="allow" AllowAdvertise="no" Description="$(var.JpFeatureJdkEnvPathDescription)" Id="jdk_env_path" Level="1" Title="$(var.JpFeatureJdkEnvPathTitle)">
+        <ComponentRef Id="comp_env_path"/>
+      </Feature>
+
+      <Feature Absent="allow" AllowAdvertise="no" Description="$(var.JpFeatureJdkEnvJavaHomeDescription)" Id="jdk_env_java_home" Level="2" Title="$(var.JpFeatureJdkEnvJavaHomeTitle)">
+        <ComponentRef Id="comp_env_java_home"/>
+      </Feature>
+
+      <Feature Absent="allow" AllowAdvertise="no" Description="$(var.JpFeatureJdkRegistryJarDescription)" Id="jdk_registry_jar" Level="2" Title="$(var.JpFeatureJdkRegistryJarTitle)">
+        <ComponentRef Id="comp_registry_jar_content_type"/>
+        <ComponentRef Id="comp_registry_jar_file_type"/>
+        <ComponentRef Id="comp_registry_jar_menu"/>
+        <ComponentRef Id="comp_registry_jar_cmd"/>
+      </Feature>
+    </Feature>
+    <!-- features end -->
+
+    <CustomAction Id="JpSetARPINSTALLLOCATION" Property="ARPINSTALLLOCATION" Value="[INSTALLDIR]" />
+    <CustomAction Id="JpSetARPCOMMENTS" Property="ARPCOMMENTS" Value="$(var.JpAppDescription)" />
+    <CustomAction Id="JpSetARPCONTACT" Property="ARPCONTACT" Value="$(var.JpAppVendor)" />
+    <CustomAction Id="JpSetARPSIZE" Property="ARPSIZE" Value="$(var.JpAppSizeKb)" />
+
+    <?ifdef JpHelpURL ?>
+      <CustomAction Id="JpSetARPHELPLINK" Property="ARPHELPLINK" Value="$(var.JpHelpURL)" />
+    <?endif?>
+
+    <?ifdef JpAboutURL ?>
+      <CustomAction Id="JpSetARPURLINFOABOUT" Property="ARPURLINFOABOUT" Value="$(var.JpAboutURL)" />
+    <?endif?>
+
+    <?ifdef JpUpdateURL ?>
+      <CustomAction Id="JpSetARPURLUPDATEINFO" Property="ARPURLUPDATEINFO" Value="$(var.JpUpdateURL)" />
+    <?endif?>
+
+    <?ifdef JpIcon ?>
+    <Property Id="ARPPRODUCTICON" Value="JpARPPRODUCTICON"/>
+    <Icon Id="JpARPPRODUCTICON" SourceFile="$(var.JpIcon)"/>
+    <?endif?>
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR"></Property>
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.JpLicenseRtf)"></WixVariable>
+    <UIRef Id="WixUI_FeatureTree"></UIRef>
+    <UIRef Id="WixUI_ErrorProgressText"/>
+
+    <?ifdef JpWixUIBannerBmp?>
+      <WixVariable Id="WixUIBannerBmp" Value="$(var.JpWixUIBannerBmp)"/>
+    <?endif?>
+    <?ifdef JpWixUIDialogBmp?>
+      <WixVariable Id="WixUIDialogBmp" Value="$(var.JpWixUIDialogBmp)"/>
+    <?endif?>
+
+    <InstallExecuteSequence>
+      <Custom Action="JpSetARPINSTALLLOCATION" After="CostFinalize">Not Installed</Custom>
+      <Custom Action="JpSetARPCOMMENTS" After="CostFinalize">Not Installed</Custom>
+      <Custom Action="JpSetARPCONTACT" After="CostFinalize">Not Installed</Custom>
+      <Custom Action="JpSetARPSIZE" After="CostFinalize">Not Installed</Custom>
+      <?ifdef JpHelpURL ?>
+        <Custom Action="JpSetARPHELPLINK" After="CostFinalize">Not Installed</Custom>
+      <?endif?>
+      <?ifdef JpAboutURL ?>
+        <Custom Action="JpSetARPURLINFOABOUT" After="CostFinalize">Not Installed</Custom>
+      <?endif?>
+      <?ifdef JpUpdateURL ?>
+        <Custom Action="JpSetARPURLUPDATEINFO" After="CostFinalize">Not Installed</Custom>
+      <?endif?>
+
+      <?ifndef JpAllowUpgrades ?>
+      <Custom Action="JpDisallowUpgrade" After="FindRelatedProducts">JP_UPGRADABLE_FOUND</Custom>
+      <?endif?>
+      <?ifndef JpAllowDowngrades ?>
+      <Custom Action="JpDisallowDowngrade" After="FindRelatedProducts">JP_DOWNGRADABLE_FOUND</Custom>
+      <?endif?>
+      <RemoveExistingProducts Before="CostInitialize"/>
+    </InstallExecuteSequence>
+
+  </Product>
+</Wix>

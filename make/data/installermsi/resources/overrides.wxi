@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+    <?define JpProductName="OpenJDK $(var.JpAppVersion)"?>
+    <?define JpWixUIBannerBmp="../installermsi/resources/banner.bmp"?>
+    <?define JpWixUIDialogBmp="../installermsi/resources/dialog.bmp"?>
+    <?define JpLicenseRtf="../installermsi/temp/config/LICENSE"?>
+
+    <?define JpCompRegistryRuntimeCurrentVersionUuid="b93aa52b-90ff-4fd2-b3dc-870c9190f688"?>
+    <?define JpCompRegistryRuntimeJavaHomeUuid="099e4843-1f6a-4146-b678-d386689e05eb"?>
+    <?define JpCompEnvPathUuid="7388eff2-3cb6-4e01-8bcb-9227634ce086"?>
+    <?define JpCompEnvJavaHomeUuid="3d72b186-0c39-4205-9e55-a90645ec3c16"?>
+    <?define JpCompRegistryJarContentTypeUuid="c3e7016b-eb42-4ec2-9776-f047712c7907"?>
+    <?define JpCompRegistryJarFileTypeUuid="8e7c26a6-b758-4e95-9bc3-c95f0c91a424"?>
+    <?define JpCompRegistryJarMenuUuid="570bed50-8e4d-413c-b017-72088ada6ddb"?>
+    <?define JpCompRegistryJarCmdUuid="ed575256-b941-4b6a-a7f1-35d6d464a11f"?>
+
+    <?define JpFeatureJdkTitle="OpenJDK Runtime"?>
+    <?define JpFeatureJdkDescription="OpenJDK runtime files."?>
+
+    <?define JpFeatureJdkRegistryRuntimeTitle="Windows Registry"?>
+    <?define JpFeatureJdkRegistryRuntimeDescription="Adds 'JavaHome' and 'RuntimeLib' Windows Registry keys under 'HKLM\Software\JavaSoft'."?>
+
+    <?define JpFeatureJdkEnvPathTitle="PATH Variable"?>
+    <?define JpFeatureJdkEnvPathDescription="Appends '&lt;jdk&gt;/bin' to the 'PATH' system environment variable."?>
+
+    <?define JpFeatureJdkEnvJavaHomeTitle="JAVA_HOME Variable"?>
+    <?define JpFeatureJdkEnvJavaHomeDescription="Sets 'JAVA_HOME' system environment variable."?>
+
+    <?define JpFeatureJdkRegistryJarTitle="JAR Files Association"?>
+    <?define JpFeatureJdkRegistryJarDescription="Allows to run JAR files from Windows Explorer."?>
+
+<Include/>

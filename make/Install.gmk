@@ -26,6 +26,8 @@
 default: install
 
 include $(SPEC)
+include MakeBase.gmk
+include ToolsJdk.gmk
 
 BINARIES := $(notdir $(wildcard $(JDK_IMAGE_DIR)/bin/*))
 INSTALLDIR := openjdk-$(VERSION_SHORT)
@@ -41,3 +43,43 @@ install:
 	$(MKDIR) -p $(INSTALL_PREFIX)/bin
 	$(RM) $(addprefix $(INSTALL_PREFIX)/bin/, $(BINARIES))
 	$(foreach b, $(BINARIES), $(LN) -s $(INSTALL_PREFIX)/jvm/$(INSTALLDIR)/bin/$b $(INSTALL_PREFIX)/bin/$b &&) true
+
+# Create MSI installer from jdk image
+installer-msi:
+	echo Creating MSI installer in $(INSTALLERMSI_IMAGE_DIR)
+	$(RM) -r $(INSTALLERMSI_IMAGE_DIR)
+	$(MKDIR) -p $(INSTALLERMSI_IMAGE_DIR)
+	$(CP) -rp $(TOPDIR)/make/data/installermsi/resources \
+	    $(INSTALLERMSI_IMAGE_DIR)/
+	$(MKDIR) -p $(INSTALLERMSI_IMAGE_DIR)/temp
+	cd $(INSTALLERMSI_IMAGE_DIR) && $(JDK_IMAGE_DIR)/bin/jpackage.exe \
+        --app-version $(VERSION_NUMBER_FOUR_POSITIONS) \
+        --description "OpenJDK Runtime" \
+        --license-file $(call FixPath, $(JDK_IMAGE_DIR)/legal/java.base/LICENSE) \
+	    --name openjdk \
+        --resource-dir resources \
+        --runtime-image $(call FixPath, $(JDK_IMAGE_DIR)) \
+        --temp temp \
+        --type msi \
+        --vendor "OpenJDK Upstream Project" \
+        --win-dir-chooser \
+        --win-help-url https://openjdk.java.net/
+
+# Create a single XML file (based on jpackage config output) that can be
+# used bu jdk vendors to build extended installers
+installer-msi-xml:
+	echo Creating MSI installer XML $(INSTALLERMSI_IMAGE_DIR)
+	$(RM) -f openjdk-$(VERSION_NUMBER).xml
+	$(CP) $(INSTALLERMSI_IMAGE_DIR)/temp/config/LICENSE \
+        $(INSTALLERMSI_IMAGE_DIR)/resources/LICENSE.rtf
+	$(CP) $(TOPDIR)/src/java.base/windows/native/launcher/icons/awt.ico \
+        $(INSTALLERMSI_IMAGE_DIR)/resources/icon.ico
+	$(TOOL_INSTALLERMSI_CREATE_EXT_XML) \
+        $(call FixPath, $(TOPDIR))/make/data/installermsi/extend/template.xml \
+        $(call FixPath, $(INSTALLERMSI_IMAGE_DIR))/temp/config \
+        $(VERSION_FEATURE) \
+        $(VERSION_NUMBER) \
+        $(VERSION_NUMBER_FOUR_POSITIONS) \
+        $(call FixPath, $(INSTALLERMSI_IMAGE_DIR))/openjdk-$(VERSION_NUMBER).xml
+
+.PHONY: default installer-msi installer-msi-xml

@@ -23,8 +23,11 @@
 package jdk.jpackage.test;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +38,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import jdk.jpackage.test.Functional.ThrowingRunnable;
 import jdk.jpackage.test.PackageTest.PackageHandlers;
+
+import static java.nio.file.Files.*;
+import static jdk.jpackage.test.TKit.createUniqueFileName;
 
 public class WindowsHelper {
 
@@ -61,7 +67,7 @@ public class WindowsHelper {
         return Path.of(cmd.getArgumentValue("--install-dir", cmd::name));
     }
 
-    private static void runMsiexecWithRetries(Executor misexec) {
+    static void runMsiexecWithRetries(Executor misexec) {
         Executor.Result result = null;
         for (int attempt = 0; attempt < 8; ++attempt) {
             result = misexec.executeWithoutExitCodeCheck();
@@ -354,8 +360,14 @@ public class WindowsHelper {
         private final String name;
     }
 
-    private static String queryRegistryValue(String keyPath, String valueName) {
-        var status = Executor.of("reg", "query", keyPath, "/v", valueName)
+    public static String queryRegistryValue(String keyPath, String valueName) {
+        List<String> args = new ArrayList<>(List.of("reg", "query", keyPath));
+        if (!valueName.isEmpty()) {
+            args.addAll(List.of("/v", valueName));
+        } else {
+            args.add("/ve");
+        }
+        var status = Executor.of(args.toArray(new String[0]))
                 .saveOutput()
                 .executeWithoutExitCodeCheck();
         if (status.exitCode == 1) {
@@ -375,7 +387,11 @@ public class WindowsHelper {
         String value = status.assertExitCodeIsZero().getOutput().stream().skip(2).findFirst().orElseThrow();
         // Extract the last field from the following line:
         //     Common Desktop    REG_SZ    C:\Users\Public\Desktop
-        value = value.split("    REG_SZ    ")[1];
+        String[] parts = value.split(" {4}");
+        value = parts[parts.length - 1];
+        if (value.startsWith("REG_")) {
+            value = "";
+        }
 
         TKit.trace(String.format("Registry value [%s] at [%s] path is [%s]",
                 valueName, keyPath, value));
@@ -395,6 +411,86 @@ public class WindowsHelper {
         return value;
     }
 
+    public static Path findBuildRoot() {
+        // expect running with make run-test
+        Path root = Path.of(".");
+
+        for (int i = 0; i < 10; i++) {
+            if (isDirectory(root.resolve("test-support"))) {
+                return root.normalize().toAbsolutePath();
+            }
+            root = root.resolve("..");
+        }
+
+        // not running with make run-test, check default build dir
+        Path defaultRoot = TKit.SRC_ROOT.resolve("../../build/windows-x86_64-server-release");
+        if (isDirectory(defaultRoot)) {
+            return defaultRoot.normalize().toAbsolutePath();
+        }
+
+        // not using default build dir, check env var
+        String rootFromEnvVar = System.getenv(JPACKAGE_TEST_BUILD_ROOT_VAR);
+        if (null != rootFromEnvVar) {
+            Path rootFromEnv = Path.of(rootFromEnvVar);
+            if (isDirectory(rootFromEnv)) {
+                return rootFromEnv.normalize().toAbsolutePath();
+            }
+        }
+
+        // not found
+        throw new RuntimeException("Unable to locate build root path," +
+                " please specify '-e:" + JPACKAGE_TEST_BUILD_ROOT_VAR + "=c:/path/to/jdk/build/root'" +
+                " option to JTreg command");
+    }
+
+    public static Path findInstallerMsi() throws Exception {
+        Path buildRoot = findBuildRoot();
+        Path msiDir = buildRoot.resolve("images/installermsi");
+        try (DirectoryStream<Path> stream = newDirectoryStream(msiDir)) {
+            for (Path path : stream) {
+                String name = path.getFileName().toString();
+                if (isRegularFile(path) && name.startsWith("openjdk-") && name.endsWith(".msi")) {
+                    return path.normalize().toAbsolutePath();
+                }
+            }
+        }
+        throw new RuntimeException("Unable to locate MSI installer," +
+                " please run 'make installer-msi' and re-run the test");
+    }
+
+    public static Path installPackage(Path msi, String... options) {
+        Path installed = createUniqueFileName("installed").normalize();
+        ArrayList<String> cline = new ArrayList<>(Arrays.asList(
+                MSI_EXEC.toAbsolutePath().toString(),
+                "/q",
+                "/i",
+                msi.toString(),
+                "/norestart",
+                "/l*v",
+                "install.log",
+                "INSTALLDIR=" + installed.toAbsolutePath().toString()
+        ));
+        for (String opt : options) {
+            if (!opt.isEmpty()) {
+                cline.add(opt);
+            }
+        }
+        Executor ex = Executor.of(cline.toArray(new String[0]));
+        runMsiexecWithRetries(ex);
+        return installed;
+    }
+
+    public static void uninstallPackage(Path msi) {
+        Executor ex = Executor.of(
+                MSI_EXEC.toAbsolutePath().toString(),
+                "/q",
+                "/x",
+                msi.toAbsolutePath().toString(),
+                "/l*v",
+                "uninstall.log");
+        runMsiexecWithRetries(ex);
+    }
+
     static final Set<Path> CRITICAL_RUNTIME_FILES = Set.of(Path.of(
             "bin\\server\\jvm.dll"));
 
@@ -406,8 +502,13 @@ public class WindowsHelper {
             "user.home"),
             "AppData", "Local");
 
+    private final static Path MSI_EXEC = Path.of(System.getenv("WINDIR"), "system32/msiexec.exe");
+
     private final static String SYSTEM_SHELL_FOLDERS_REGKEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders";
     private final static String USER_SHELL_FOLDERS_REGKEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders";
+    public static final String SYSTEM_ENVIRONMENT_REGKEY = "HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment";
+
+    private static final String JPACKAGE_TEST_BUILD_ROOT_VAR = "JPACKAGE_TEST_BUILD_ROOT";
 
     private static final Map<String, String> REGISTRY_VALUES = new HashMap<>();
 }
