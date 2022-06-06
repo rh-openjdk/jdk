@@ -210,8 +210,14 @@ final class SystemConfigurator {
     }
 
     /*
-     * OpenJDK FIPS mode will be enabled only if the com.redhat.fips
-     * system property is true (default) and the system is in FIPS mode.
+     * Determines whether FIPS mode should be enabled.
+     *
+     * OpenJDK FIPS mode will be enabled only if the system is in
+     * FIPS mode.
+     *
+     * Calls to this method only occur if the security property
+     * security.useFIPSProviders is true and the system property
+     * com.redhat.fips is not set to false.
      *
      * There are 2 possible ways in which OpenJDK detects that the system
      * is in FIPS mode: 1) if the NSS SECMOD_GetSystemFIPSEnabled API is
@@ -219,27 +225,22 @@ final class SystemConfigurator {
      * /proc/sys/crypto/fips_enabled file is read.
      */
     private static boolean enableFips() throws Exception {
-        boolean shouldEnable = Boolean.valueOf(System.getProperty("com.redhat.fips", "true"));
-        if (shouldEnable) {
+        if (sdebug != null) {
+            sdebug.println("Calling getSystemFIPSEnabled (libsystemconf)...");
+        }
+        try {
+            boolean fipsEnabled = getSystemFIPSEnabled();
             if (sdebug != null) {
-                sdebug.println("Calling getSystemFIPSEnabled (libsystemconf)...");
+                sdebug.println("Call to getSystemFIPSEnabled (libsystemconf) returned: "
+                               + fipsEnabled);
             }
-            try {
-                shouldEnable = getSystemFIPSEnabled();
-                if (sdebug != null) {
-                    sdebug.println("Call to getSystemFIPSEnabled (libsystemconf) returned: "
-                            + shouldEnable);
-                }
-                return shouldEnable;
-            } catch (IOException e) {
-                if (sdebug != null) {
-                    sdebug.println("Call to getSystemFIPSEnabled (libsystemconf) failed:");
-                    sdebug.println(e.getMessage());
-                }
-                throw e;
+            return fipsEnabled;
+        } catch (IOException e) {
+            if (sdebug != null) {
+                sdebug.println("Call to getSystemFIPSEnabled (libsystemconf) failed:");
+                sdebug.println(e.getMessage());
             }
-        } else {
-            return false;
+            throw e;
         }
     }
 }

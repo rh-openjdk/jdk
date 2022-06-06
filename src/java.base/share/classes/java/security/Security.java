@@ -211,25 +211,47 @@ public final class Security {
             }
         }
 
-        String disableSystemProps = System.getProperty("java.security.disableSystemPropertiesFile");
-        if ((disableSystemProps == null || "false".equalsIgnoreCase(disableSystemProps)) &&
-            "true".equalsIgnoreCase(props.getProperty("security.useSystemPropertiesFile"))) {
+        String disableSystemProps = System.getProperty("java.security.disableSystemPropertiesFile",
+                                                       "false");
+        boolean propsDisabled = Boolean.valueOf(disableSystemProps);
+        boolean useProps = Boolean.valueOf(props.getProperty("security.useSystemPropertiesFile"));
+        if (sdebug != null) {
+            sdebug.println("java.security.disableSystemPropertiesFile=" + propsDisabled);
+            sdebug.println("security.useSystemPropertiesFile=" + useProps);
+        }
+        if (!propsDisabled && useProps) {
             if (!SystemConfigurator.configureSysProps(props)) {
                 if (sdebug != null) {
-                    sdebug.println("WARNING: System properties could not be loaded.");
+                    sdebug.println("WARNING: System security properties could not be loaded.");
                 }
+            }
+        } else {
+            if (sdebug != null) {
+                sdebug.println("System security property support disabled by user.");
             }
         }
 
         // FIPS support depends on the contents of java.security so
         // ensure it has loaded first
         if (loadedProps) {
-            boolean fipsEnabled = SystemConfigurator.configureFIPS(props);
-	    if (sdebug != null) {
-		if (fipsEnabled) {
-		    sdebug.println("FIPS support enabled.");
-		} else {
-                    sdebug.println("FIPS support disabled.");
+            boolean shouldEnable = Boolean.valueOf(System.getProperty("com.redhat.fips", "true"));
+            boolean useProv = Boolean.valueOf(props.getProperty("security.useFIPSProviders"));
+            if (sdebug != null ) {
+                sdebug.println("com.redhat.fips=" + shouldEnable);
+                sdebug.println("security.useFIPSProviders=" + useProv);
+            }
+            if (shouldEnable && useProv) {
+                boolean fipsEnabled = SystemConfigurator.configureFIPS(props);
+                if (sdebug != null) {
+                    if (fipsEnabled) {
+                        sdebug.println("FIPS mode detected. Support enabled.");
+                    } else {
+                        sdebug.println("FIPS mode not detected. Support disabled.");
+                    }
+                }
+            } else {
+                if (sdebug != null ) {
+                    sdebug.println("FIPS mode support disabled by user.");
                 }
             }
         }
