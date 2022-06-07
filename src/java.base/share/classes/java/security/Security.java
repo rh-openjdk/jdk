@@ -244,9 +244,9 @@ public final class Security {
                 boolean fipsEnabled = SystemConfigurator.configureFIPS(props);
                 if (sdebug != null) {
                     if (fipsEnabled) {
-                        sdebug.println("FIPS mode detected. Support enabled.");
+                        sdebug.println("FIPS mode support configured and enabled.");
                     } else {
-                        sdebug.println("FIPS mode not detected. Support disabled.");
+                        sdebug.println("FIPS mode support disabled.");
                     }
                 }
             } else {

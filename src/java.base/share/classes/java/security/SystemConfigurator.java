@@ -54,6 +54,7 @@ final class SystemConfigurator {
     private static final String CRYPTO_POLICIES_JAVA_CONFIG =
             CRYPTO_POLICIES_BASE_DIR + "/back-ends/java.config";
 
+    private static boolean systemSecPropsEnabled = false;
     private static boolean systemFipsEnabled = false;
     private static boolean plainKeySupportEnabled = false;
 
@@ -78,13 +79,11 @@ final class SystemConfigurator {
      * security.useSystemPropertiesFile is true.
      */
     static boolean configureSysProps(Properties props) {
-        boolean loadedProps = false;
-
         try (BufferedInputStream bis =
                 new BufferedInputStream(
                         new FileInputStream(CRYPTO_POLICIES_JAVA_CONFIG))) {
             props.load(bis);
-            loadedProps = true;
+            systemSecPropsEnabled = true;
             if (sdebug != null) {
                 sdebug.println("reading system security properties file " +
                         CRYPTO_POLICIES_JAVA_CONFIG);
@@ -97,7 +96,7 @@ final class SystemConfigurator {
                 e.printStackTrace();
             }
         }
-        return loadedProps;
+        return systemSecPropsEnabled;
     }
 
     /*
@@ -110,6 +109,15 @@ final class SystemConfigurator {
         try {
             if (enableFips()) {
                 if (sdebug != null) { sdebug.println("FIPS mode detected"); }
+                if (!systemSecPropsEnabled) {
+                    // TODO: Should also check here that the policy is FIPS
+                    if (sdebug != null) {
+                        sdebug.println("FIPS mode support can not be enabled without " +
+                                       "system security properties being enabled.");
+                        sdebug.println("Please set security.useSystemPropertiesFile to true.");
+                    }
+                    return false;
+                }
                 // Remove all security providers
                 Iterator<Entry<Object, Object>> i = props.entrySet().iterator();
                 while (i.hasNext()) {
@@ -169,6 +177,8 @@ final class SystemConfigurator {
                         sdebug.println("FIPS support enabled without plain key support");
                     }
                 }
+            } else {
+                if (sdebug != null) { sdebug.println("FIPS mode not detected"); }
             }
         } catch (Exception e) {
             if (sdebug != null) {
