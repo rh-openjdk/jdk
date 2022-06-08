@@ -234,13 +234,25 @@ public final class Security {
         // FIPS support depends on the contents of java.security so
         // ensure it has loaded first
         if (loadedProps) {
-            boolean shouldEnable = Boolean.valueOf(System.getProperty("com.redhat.fips", "true"));
+            boolean shouldEnable;
+            String sysProp = System.getProperty("com.redhat.fips");
             boolean useProv = Boolean.valueOf(props.getProperty("security.useFIPSProviders"));
             if (sdebug != null ) {
-                sdebug.println("com.redhat.fips=" + shouldEnable);
+                sdebug.println("com.redhat.fips=" + (sysProp == null ? "<unset>" : sysProp));
                 sdebug.println("security.useFIPSProviders=" + useProv);
             }
-            if (shouldEnable && useProv) {
+            if (sysProp == null) {
+                shouldEnable = useProv;
+                if (sdebug != null) {
+                    sdebug.println("com.redhat.fips unset, using security.useFIPSProviders");
+                }
+            } else {
+                shouldEnable = Boolean.valueOf(sysProp);
+                if (sdebug != null) {
+                    sdebug.println("com.redhat.fips set, using its value " + shouldEnable);
+                }
+            }
+            if (shouldEnable) {
                 boolean fipsEnabled = SystemConfigurator.configureFIPS(props);
                 if (sdebug != null) {
                     if (fipsEnabled) {

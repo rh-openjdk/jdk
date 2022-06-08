@@ -477,8 +477,8 @@ jobs:
 
       - name: Turn on system security properties and FIPS mode support
         run: |
-	  sed -i -e "s:^security.useSystemPropertiesFile=.*:security.useSystemPropertiesFile=true:" ${{ env.imageroot }}/conf/security/java.security
-	  sed -i -e "s:^security.useFIPSProviders=.*:security.useFIPSProviders=true:" ${{ env.imageroot }}/conf/security/java.security
+          sed -i -e "s:^security.useSystemPropertiesFile=.*:security.useSystemPropertiesFile=true:" ${{ env.imageroot }}/conf/security/java.security
+          sed -i -e "s:^security.useFIPSProviders=.*:security.useFIPSProviders=true:" ${{ env.imageroot }}/conf/security/java.security
 
       - name: Run tests
         run: >
