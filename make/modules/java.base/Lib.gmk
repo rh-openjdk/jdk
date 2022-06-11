@@ -178,19 +178,17 @@ ifeq ($(USE_SYSCONF_NSS), true)
   LIBSYSTEMCONF_CXXFLAGS += $(NSS_CFLAGS) -DSYSCONF_NSS
 endif
 
-ifeq ($(OPENJDK_BUILD_OS), linux)
-  $(eval $(call SetupJdkLibrary, BUILD_LIBSYSTEMCONF, \
-      NAME := systemconf, \
-      OPTIMIZATION := LOW, \
-      CFLAGS := $(CFLAGS_JDKLIB) $(LIBSYSTEMCONF_CFLAGS), \
-      CXXFLAGS := $(CXXFLAGS_JDKLIB) $(LIBSYSTEMCONF_CXXFLAGS), \
-      LDFLAGS := $(LDFLAGS_JDKLIB) \
-          $(call SET_SHARED_LIBRARY_ORIGIN), \
-      LIBS_unix := $(LIBDL) $(NSS_LIBS), \
-  ))
+$(eval $(call SetupJdkLibrary, BUILD_LIBSYSTEMCONF, \
+    NAME := systemconf, \
+    OPTIMIZATION := LOW, \
+    CFLAGS := $(CFLAGS_JDKLIB) $(LIBSYSTEMCONF_CFLAGS), \
+    CXXFLAGS := $(CXXFLAGS_JDKLIB) $(LIBSYSTEMCONF_CXXFLAGS), \
+    LDFLAGS := $(LDFLAGS_JDKLIB) \
+        $(call SET_SHARED_LIBRARY_ORIGIN), \
+    LIBS_unix := $(LIBDL) $(NSS_LIBS), \
+))
 
-  TARGETS += $(BUILD_LIBSYSTEMCONF)
-endif
+TARGETS += $(BUILD_LIBSYSTEMCONF)
 
 ################################################################################
 # Create the symbols file for static builds.
