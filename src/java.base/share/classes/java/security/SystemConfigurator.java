@@ -225,8 +225,7 @@ final class SystemConfigurator {
      * OpenJDK FIPS mode will be enabled only if the system is in
      * FIPS mode.
      *
-     * Calls to this method only occur if the security property
-     * security.useFIPSProviders is true and the system property
+     * Calls to this method only occur if the system property
      * com.redhat.fips is not set to false.
      *
      * There are 2 possible ways in which OpenJDK detects that the system
