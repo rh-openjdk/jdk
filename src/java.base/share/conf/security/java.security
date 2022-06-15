@@ -80,8 +80,7 @@ security.provider.tbd=Apple
 security.provider.tbd=SunPKCS11
 
 #
-# Security providers used when the system is running in FIPS
-# mode and security.useFIPSProviders is true.
+# Security providers used when FIPS mode support is active
 #
 fips.provider.1=SunPKCS11 ${java.home}/conf/security/nss.fips.cfg
 fips.provider.2=SUN
@@ -348,13 +347,6 @@ security.overridePropertiesFile=true
 # /etc/crypto-policies/back-ends/java.config
 #
 security.useSystemPropertiesFile=false
-
-#
-# Determines whether the JDK will detect that the system is
-# running in FIPS mode (/proc/sys/crypto/fips_enabled is non-zero)
-# and switch to the use of the providers specified by the
-# fips.provider.* properties
-security.useFIPSProviders=false
 
 #
 # Determines the default key and trust manager factory algorithms for

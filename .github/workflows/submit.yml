@@ -385,7 +385,7 @@ jobs:
         continue-on-error: true
 
   linux_x64_test_fips:
-    name: Linux x64
+    name: Linux x64 + FIPS
     runs-on: "ubuntu-20.04"
     needs:
       - prerequisites

@@ -236,15 +236,13 @@ public final class Security {
         if (loadedProps) {
             boolean shouldEnable;
             String sysProp = System.getProperty("com.redhat.fips");
-            boolean useProv = Boolean.valueOf(props.getProperty("security.useFIPSProviders"));
             if (sdebug != null ) {
                 sdebug.println("com.redhat.fips=" + (sysProp == null ? "<unset>" : sysProp));
-                sdebug.println("security.useFIPSProviders=" + useProv);
             }
             if (sysProp == null) {
-                shouldEnable = useProv;
+                shouldEnable = true;
                 if (sdebug != null) {
-                    sdebug.println("com.redhat.fips unset, using security.useFIPSProviders");
+                    sdebug.println("com.redhat.fips unset, using default value of true");
                 }
             } else {
                 shouldEnable = Boolean.valueOf(sysProp);
