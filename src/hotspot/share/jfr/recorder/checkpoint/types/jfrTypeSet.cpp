@@ -243,6 +243,7 @@ int write__klass(JfrCheckpointWriter* writer, const void* k) {
 int write__klass__leakp(JfrCheckpointWriter* writer, const void* k) {
   assert(k != NULL, "invariant");
   KlassPtr klass = (KlassPtr)k;
+  CLEAR_LEAKP(klass);
   return write_klass(writer, klass, true);
 }
 
@@ -848,7 +849,7 @@ class MethodIteratorHost {
  private:
   MethodCallback _method_cb;
   KlassCallback _klass_cb;
-  MethodUsedPredicate<leakp> _method_used_predicate;
+  MethodUsedPredicate _method_used_predicate;
   MethodFlagPredicate<leakp> _method_flag_predicate;
  public:
   MethodIteratorHost(JfrCheckpointWriter* writer,
@@ -1103,6 +1104,10 @@ void JfrTypeSet::clear() {
 }
 
 size_t JfrTypeSet::on_unloading_classes(JfrCheckpointWriter* writer) {
+  // JfrTraceIdEpoch::has_changed_tag_state_no_reset() is a load-acquire we issue to see side-effects (i.e. tags).
+  // The JfrRecorderThread does this as part of normal processing, but with concurrent class unloading, which can
+  // happen in arbitrary threads, we invoke it explicitly.
+  JfrTraceIdEpoch::has_changed_tag_state_no_reset();
   if (JfrRecorder::is_recording()) {
     return serialize(writer, NULL, true, false);
   }
