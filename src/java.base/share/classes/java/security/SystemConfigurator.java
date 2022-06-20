@@ -54,7 +54,6 @@ final class SystemConfigurator {
     private static final String CRYPTO_POLICIES_JAVA_CONFIG =
             CRYPTO_POLICIES_BASE_DIR + "/back-ends/java.config";
 
-    private static boolean systemSecPropsEnabled = false;
     private static boolean systemFipsEnabled = false;
     private static boolean plainKeySupportEnabled = false;
 
@@ -79,11 +78,13 @@ final class SystemConfigurator {
      * security.useSystemPropertiesFile is true.
      */
     static boolean configureSysProps(Properties props) {
+        boolean systemSecPropsLoaded = true;
+
         try (BufferedInputStream bis =
                 new BufferedInputStream(
                         new FileInputStream(CRYPTO_POLICIES_JAVA_CONFIG))) {
             props.load(bis);
-            systemSecPropsEnabled = true;
+            systemSecPropsLoaded = true;
             if (sdebug != null) {
                 sdebug.println("reading system security properties file " +
                         CRYPTO_POLICIES_JAVA_CONFIG);
@@ -96,7 +97,7 @@ final class SystemConfigurator {
                 e.printStackTrace();
             }
         }
-        return systemSecPropsEnabled;
+        return systemSecPropsLoaded;
     }
 
     /*
@@ -109,15 +110,6 @@ final class SystemConfigurator {
         try {
             if (enableFips()) {
                 if (sdebug != null) { sdebug.println("FIPS mode detected"); }
-                if (!systemSecPropsEnabled) {
-                    // TODO: Should also check here that the policy is FIPS
-                    if (sdebug != null) {
-                        sdebug.println("FIPS mode support can not be enabled without " +
-                                       "system security properties being enabled.");
-                        sdebug.println("Please set security.useSystemPropertiesFile to true.");
-                    }
-                    return false;
-                }
                 // Remove all security providers
                 Iterator<Entry<Object, Object>> i = props.entrySet().iterator();
                 while (i.hasNext()) {
@@ -219,7 +211,7 @@ final class SystemConfigurator {
         return plainKeySupportEnabled;
     }
 
-    /*
+    /**
      * Determines whether FIPS mode should be enabled.
      *
      * OpenJDK FIPS mode will be enabled only if the system is in
@@ -232,6 +224,8 @@ final class SystemConfigurator {
      * is in FIPS mode: 1) if the NSS SECMOD_GetSystemFIPSEnabled API is
      * available at OpenJDK's built-time, it is called; 2) otherwise, the
      * /proc/sys/crypto/fips_enabled file is read.
+     *
+     * @return true if the system is in FIPS mode
      */
     private static boolean enableFips() throws Exception {
         if (sdebug != null) {
