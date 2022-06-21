@@ -78,7 +78,7 @@ final class SystemConfigurator {
      * security.useSystemPropertiesFile is true.
      */
     static boolean configureSysProps(Properties props) {
-        boolean systemSecPropsLoaded = true;
+        boolean systemSecPropsLoaded = false;
 
         try (BufferedInputStream bis =
                 new BufferedInputStream(
