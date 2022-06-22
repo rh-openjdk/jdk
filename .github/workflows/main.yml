@@ -309,6 +309,16 @@ jobs:
       bootjdk-platform: linux-x64
       runs-on: ubuntu-22.04
 
+  test-linux-x64-fips:
+    name: linux-x64-fips
+    needs:
+      - build-linux-x64
+    uses: ./.github/workflows/test-fips.yml
+    with:
+      platform: linux-x64
+      bootjdk-platform: linux-x64
+      runs-on: ubuntu-22.04
+
   test-linux-x86:
     name: linux-x86
     needs:
