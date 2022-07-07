@@ -384,7 +384,8 @@ abstract class P11Key implements Key, Length {
             new CK_ATTRIBUTE(CKA_SENSITIVE),
             new CK_ATTRIBUTE(CKA_EXTRACTABLE),
         });
-        if (!plainKeySupportEnabled && (attributes[1].getBoolean() ||
+        boolean exportable = plainKeySupportEnabled && !algorithm.equals("DH");
+        if (!exportable && (attributes[1].getBoolean() ||
                 (attributes[2].getBoolean() == false))) {
             return new P11PrivateKey
                 (session, keyID, algorithm, keyLength, attributes);
