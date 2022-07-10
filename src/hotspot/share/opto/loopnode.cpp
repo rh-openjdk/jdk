@@ -2045,7 +2045,7 @@ Node* CountedLoopNode::match_incr_with_optional_truncation(Node* expr, Node** tr
 }
 
 LoopNode* CountedLoopNode::skip_strip_mined(int expect_skeleton) {
-  if (is_strip_mined() && is_valid_counted_loop(T_INT)) {
+  if (is_strip_mined() && in(EntryControl) != NULL && in(EntryControl)->is_OuterStripMinedLoop()) {
     verify_strip_mined(expect_skeleton);
     return in(EntryControl)->as_Loop();
   }
@@ -2150,12 +2150,14 @@ Node* CountedLoopNode::skip_predicates_from_entry(Node* ctrl) {
   }
 
 Node* CountedLoopNode::skip_predicates() {
+  Node* ctrl = in(LoopNode::EntryControl);
   if (is_main_loop()) {
-    Node* ctrl = skip_strip_mined()->in(LoopNode::EntryControl);
-
+    ctrl = skip_strip_mined()->in(LoopNode::EntryControl);
+  }
+  if (is_main_loop() || is_post_loop()) {
     return skip_predicates_from_entry(ctrl);
   }
-  return in(LoopNode::EntryControl);
+  return ctrl;
 }
 
 

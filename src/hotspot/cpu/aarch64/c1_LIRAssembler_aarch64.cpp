@@ -2837,7 +2837,7 @@ void LIR_Assembler::emit_profile_type(LIR_OpProfileType* op) {
         }
 #endif
         // first time here. Set profile type.
-        __ ldr(tmp, mdo_addr);
+        __ str(tmp, mdo_addr);
       } else {
         assert(ciTypeEntries::valid_ciklass(current_klass) != NULL &&
                ciTypeEntries::valid_ciklass(current_klass) != exact_klass, "inconsistent");
@@ -2988,7 +2988,7 @@ void LIR_Assembler::membar_loadstore() { __ membar(MacroAssembler::LoadStore); }
 void LIR_Assembler::membar_storeload() { __ membar(MacroAssembler::StoreLoad); }
 
 void LIR_Assembler::on_spin_wait() {
-  Unimplemented();
+  __ spin_wait();
 }
 
 void LIR_Assembler::get_thread(LIR_Opr result_reg) {
