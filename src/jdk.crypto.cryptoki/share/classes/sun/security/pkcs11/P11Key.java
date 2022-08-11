@@ -396,7 +396,8 @@ abstract class P11Key implements Key, Length {
                     new CK_ATTRIBUTE(CKA_EXTRACTABLE),
         });
 
-        boolean keySensitive = (!plainKeySupportEnabled &&
+        boolean exportable = plainKeySupportEnabled && !algorithm.equals("DH");
+        boolean keySensitive = (!exportable &&
             (attrs[0].getBoolean() ||
              attrs[1].getBoolean() || !attrs[2].getBoolean()));
 
