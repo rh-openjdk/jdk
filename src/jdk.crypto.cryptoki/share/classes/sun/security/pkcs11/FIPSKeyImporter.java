@@ -38,7 +38,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.DHPrivateKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 
 import sun.security.jca.JCAUtil;
@@ -189,34 +188,6 @@ final class FIPSKeyImporter {
                             ECUtil.getECParameterSpec(sunECProvider,
                                     attrsMap.get(CKA_EC_PARAMS).getByteArray()))
                             .getEncoded();
-                    if (token.config.getNssNetscapeDbWorkaround() &&
-                            attrsMap.get(CKA_NETSCAPE_DB) == null) {
-                        attrsMap.put(CKA_NETSCAPE_DB,
-                                new CK_ATTRIBUTE(CKA_NETSCAPE_DB, BigInteger.ZERO));
-                    }
-                } else if (keyType == CKK_DH) {
-                    if (debug != null) {
-                        debug.println("Importing a Diffie-Hellman private key...");
-                    }
-                    if (DHKF == null) {
-                        DHKFLock.lock();
-                        try {
-                            if (DHKF == null) {
-                                DHKF = KeyFactory.getInstance(
-                                        "DH", P11Util.getSunJceProvider());
-                            }
-                        } finally {
-                            DHKFLock.unlock();
-                        }
-                    }
-                    DHPrivateKeySpec spec = new DHPrivateKeySpec
-                            (((v = attrsMap.get(CKA_VALUE).getBigInteger()) != null)
-                                    ? v : BigInteger.ZERO,
-                            ((v = attrsMap.get(CKA_PRIME).getBigInteger()) != null)
-                                    ? v : BigInteger.ZERO,
-                            ((v = attrsMap.get(CKA_BASE).getBigInteger()) != null)
-                                    ? v : BigInteger.ZERO);
-                    keyBytes = DHKF.generatePrivate(spec).getEncoded();
                     if (token.config.getNssNetscapeDbWorkaround() &&
                             attrsMap.get(CKA_NETSCAPE_DB) == null) {
                         attrsMap.put(CKA_NETSCAPE_DB,
