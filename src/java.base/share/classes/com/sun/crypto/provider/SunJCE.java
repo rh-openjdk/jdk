@@ -540,86 +540,86 @@ public final class SunJCE extends Provider {
         psA("AlgorithmParameters", "ChaCha20-Poly1305",
                 "com.sun.crypto.provider.ChaCha20Poly1305Parameters", null);
 
+        /*
+         * Key factories
+         */
+        psA("KeyFactory", "DiffieHellman",
+                "com.sun.crypto.provider.DHKeyFactory",
+                null);
+
+        /*
+         * Secret-key factories
+         */
+        ps("SecretKeyFactory", "DES",
+                "com.sun.crypto.provider.DESKeyFactory");
+
+        psA("SecretKeyFactory", "DESede",
+                "com.sun.crypto.provider.DESedeKeyFactory", null);
+
+        psA("SecretKeyFactory", "PBEWithMD5AndDES",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithMD5AndDES",
+                null);
+
+        /*
+         * Internal in-house crypto algorithm used for
+         * the JCEKS keystore type.  Since this was developed
+         * internally, there isn't an OID corresponding to this
+         * algorithm.
+         */
+        ps("SecretKeyFactory", "PBEWithMD5AndTripleDES",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithMD5AndTripleDES");
+
+        psA("SecretKeyFactory", "PBEWithSHA1AndDESede",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndDESede",
+                null);
+
+        psA("SecretKeyFactory", "PBEWithSHA1AndRC2_40",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC2_40",
+                null);
+
+        psA("SecretKeyFactory", "PBEWithSHA1AndRC2_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC2_128",
+                null);
+
+        psA("SecretKeyFactory", "PBEWithSHA1AndRC4_40",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC4_40",
+                null);
+
+        psA("SecretKeyFactory", "PBEWithSHA1AndRC4_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC4_128",
+                null);
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA1AndAES_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA1AndAES_128");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA224AndAES_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA224AndAES_128");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA256AndAES_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA256AndAES_128");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA384AndAES_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA384AndAES_128");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA512AndAES_128",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA512AndAES_128");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA1AndAES_256",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA1AndAES_256");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA224AndAES_256",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA224AndAES_256");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA256AndAES_256",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA256AndAES_256");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA384AndAES_256",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA384AndAES_256");
+
+        ps("SecretKeyFactory", "PBEWithHmacSHA512AndAES_256",
+                "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA512AndAES_256");
+
         if (!systemFipsEnabled) {
-            /*
-             * Key factories
-             */
-            psA("KeyFactory", "DiffieHellman",
-                    "com.sun.crypto.provider.DHKeyFactory",
-                    null);
-
-            /*
-             * Secret-key factories
-             */
-            ps("SecretKeyFactory", "DES",
-                    "com.sun.crypto.provider.DESKeyFactory");
-
-            psA("SecretKeyFactory", "DESede",
-                    "com.sun.crypto.provider.DESedeKeyFactory", null);
-
-            psA("SecretKeyFactory", "PBEWithMD5AndDES",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithMD5AndDES",
-                    null);
-
-            /*
-             * Internal in-house crypto algorithm used for
-             * the JCEKS keystore type.  Since this was developed
-             * internally, there isn't an OID corresponding to this
-             * algorithm.
-             */
-            ps("SecretKeyFactory", "PBEWithMD5AndTripleDES",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithMD5AndTripleDES");
-
-            psA("SecretKeyFactory", "PBEWithSHA1AndDESede",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndDESede",
-                    null);
-
-            psA("SecretKeyFactory", "PBEWithSHA1AndRC2_40",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC2_40",
-                    null);
-
-            psA("SecretKeyFactory", "PBEWithSHA1AndRC2_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC2_128",
-                    null);
-
-            psA("SecretKeyFactory", "PBEWithSHA1AndRC4_40",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC4_40",
-                    null);
-
-            psA("SecretKeyFactory", "PBEWithSHA1AndRC4_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithSHA1AndRC4_128",
-                    null);
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA1AndAES_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA1AndAES_128");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA224AndAES_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA224AndAES_128");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA256AndAES_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA256AndAES_128");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA384AndAES_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA384AndAES_128");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA512AndAES_128",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA512AndAES_128");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA1AndAES_256",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA1AndAES_256");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA224AndAES_256",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA224AndAES_256");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA256AndAES_256",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA256AndAES_256");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA384AndAES_256",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA384AndAES_256");
-
-            ps("SecretKeyFactory", "PBEWithHmacSHA512AndAES_256",
-                    "com.sun.crypto.provider.PBEKeyFactory$PBEWithHmacSHA512AndAES_256");
-
             // PBKDF2
             psA("SecretKeyFactory", "PBKDF2WithHmacSHA1",
                     "com.sun.crypto.provider.PBKDF2Core$HmacSHA1",
