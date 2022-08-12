@@ -28,6 +28,8 @@
 #include "jvm_md.h"
 #include <stdio.h>
 
+#ifdef LINUX
+
 #ifdef SYSCONF_NSS
 #include <nss3/pk11pub.h>
 #else
@@ -222,3 +224,13 @@ JNIEXPORT jboolean JNICALL Java_java_security_SystemConfigurator_getSystemFIPSEn
       return (fips_enabled == '1' ? JNI_TRUE : JNI_FALSE);
     }
 }
+
+#else // !LINUX
+
+JNIEXPORT jboolean JNICALL Java_java_security_SystemConfigurator_getSystemFIPSEnabled
+  (JNIEnv *env, jclass cls)
+{
+    return JNI_FALSE;
+}
+
+#endif
