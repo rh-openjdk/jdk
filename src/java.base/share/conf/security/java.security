@@ -335,8 +335,8 @@ fips.nssdb.path=sql:/etc/pki/nssdb
 # the security property value defined here.
 #
 # When used as a system property, UTF-8 encoded values are valid. When
-# used as a security property, encode non-Basic Latin Unicode characters
-# with \uXXXX.
+# used as a security property (such as in this file), encode non-Basic
+# Latin Unicode characters with \uXXXX.
 #
 fips.nssdb.pin=pin:
 

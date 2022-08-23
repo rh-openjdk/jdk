@@ -22,14 +22,10 @@
  * questions.
  */
 
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.Files;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
 import java.security.KeyStore;
 import java.security.Provider;
 import java.security.Security;
@@ -40,6 +36,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 
 import jdk.test.lib.process.Proc;
+import jdk.test.lib.util.FileUtils;
 
 /*
  * @test
@@ -47,7 +44,7 @@ import jdk.test.lib.process.Proc;
  * @summary
  *   Test that the fips.nssdb.path and fips.nssdb.pin properties can be used
  *   for a successful login into an NSS DB. Some additional unitary testing
- *   is then peformed. This test depends on NSS modutil and must be run in
+ *   is then performed. This test depends on NSS modutil and must be run in
  *   FIPS mode (the SunPKCS11-NSS-FIPS security provider has to be available).
  * @modules jdk.crypto.cryptoki/sun.security.pkcs11:+open
  * @library /test/lib
@@ -69,8 +66,8 @@ public final class NssdbPin {
     private static final String[] PINS_TO_TEST =
             new String[] {
                     "",
-                    "1234567890abcdef1234567890ABCDEF" +
-                            new String(new char[] {'\uA4F7'})};
+                    "1234567890abcdef1234567890ABCDEF\uA4F7"
+            };
     private static enum PropType { SYSTEM, SECURITY }
     private static enum LoginType { IMPLICIT, EXPLICIT }
 
@@ -92,15 +89,17 @@ public final class NssdbPin {
     }
 
     public static void main(String[] args) throws Throwable {
-        if (args.length > 0) {
+        if (args.length == 3) {
             // Executed by a child process.
             mainChild(args[0], args[1], LoginType.valueOf(args[2]));
-        } else {
+        } else if (args.length == 0) {
             // Executed by the parent process.
             mainLauncher();
             // Test defaults
             mainChild("sql:/etc/pki/nssdb", "", LoginType.IMPLICIT);
             System.out.println("TEST PASS - OK");
+        } else {
+            throw new Exception("Unexpected number of arguments.");
         }
     }
 
@@ -129,7 +128,7 @@ public final class NssdbPin {
             throw new Exception(FIPS_PROVIDER_NAME + " initialization failed.");
         }
         if (DEBUG) {
-            System.out.println("Login type: " + loginType.name());
+            System.out.println("Login type: " + loginType);
         }
         if (loginType == LoginType.EXPLICIT) {
             // Do the expansion to account for truncation, so C_Login in
@@ -205,15 +204,18 @@ public final class NssdbPin {
             try {
                 TestContext ctx = new TestContext(pin, workspace);
                 createNSSDB(ctx);
-                for (PropType propType : PropType.values()) {
-                    ctx.propType = propType;
-                    pinLauncher(ctx);
-                    envLauncher(ctx);
-                    fileLauncher(ctx);
+                {
+                    ctx.loginType = LoginType.IMPLICIT;
+                    for (PropType propType : PropType.values()) {
+                        ctx.propType = propType;
+                        pinLauncher(ctx);
+                        envLauncher(ctx);
+                        fileLauncher(ctx);
+                    }
                 }
                 explicitLoginLauncher(ctx);
             } finally {
-                deleteDir(workspace);
+                FileUtils.deleteFileTreeWithRetry(workspace);
             }
         }
     }
@@ -229,6 +231,8 @@ public final class NssdbPin {
     }
 
     private static void fileLauncher(TestContext ctx) throws Throwable {
+        // The file containing the PIN (ctx.nssdbPinFile) was created by the
+        // generatePinFile method, called from createNSSDB.
         launchTest(p -> {}, "file:" + ctx.nssdbPinFile, ctx);
     }
 
@@ -243,7 +247,7 @@ public final class NssdbPin {
             TestContext ctx) throws Throwable {
         if (DEBUG) {
             System.out.println("Launching JVM with " + FIPS_NSSDB_PATH_PROP +
-                    "=" + ctx.workspace + " and " + FIPS_NSSDB_PIN_PROP +
+                    "=" + ctx.nssdbPath + " and " + FIPS_NSSDB_PIN_PROP +
                     "=" + pinPropVal);
         }
         Proc p = Proc.create(NssdbPin.class.getName())
@@ -291,7 +295,7 @@ public final class NssdbPin {
     }
 
     private static void createNSSDB(TestContext ctx) throws Throwable {
-        ProcessBuilder pb = getModutilPB(ctx, Arrays.asList("-create"), null);
+        ProcessBuilder pb = getModutilPB(ctx, "-create");
         if (DEBUG) {
             System.out.println("Creating an NSS DB in " + ctx.workspace +
                     "...");
@@ -301,8 +305,8 @@ public final class NssdbPin {
             throw new Exception("NSS DB creation failed.");
         }
         generatePinFile(ctx);
-        pb = getModutilPB(ctx, Arrays.asList("-changepw", NSSDB_TOKEN_NAME),
-                Arrays.asList("-newpwfile", ctx.nssdbPinFile.toString()));
+        pb = getModutilPB(ctx, "-changepw", NSSDB_TOKEN_NAME,
+                "-newpwfile", ctx.nssdbPinFile.toString());
         if (DEBUG) {
             System.out.println("NSS DB created.");
             System.out.println("Changing NSS DB PIN...");
@@ -316,15 +320,12 @@ public final class NssdbPin {
         }
     }
 
-    private static ProcessBuilder getModutilPB(TestContext ctx,
-            List<String> opts, List<String> args) throws Throwable {
+    private static ProcessBuilder getModutilPB(TestContext ctx, String... args)
+            throws Throwable {
         ProcessBuilder pb = new ProcessBuilder("modutil", "-force");
         List<String> pbCommand = pb.command();
-        if (opts != null) {
-            pbCommand.addAll(opts);
-        }
         if (args != null) {
-            pbCommand.addAll(args);
+            pbCommand.addAll(Arrays.asList(args));
         }
         pbCommand.add("-dbdir");
         pbCommand.add(ctx.nssdbPath);
@@ -340,23 +341,5 @@ public final class NssdbPin {
         ctx.nssdbPinFile = Files.createTempFile(ctx.workspace, null, null);
         Files.writeString(ctx.nssdbPinFile, ctx.pin + System.lineSeparator() +
                 "2nd line with garbage");
-    }
-
-    private static void deleteDir(final Path directory) throws IOException {
-        Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult visitFile(Path file,
-                    BasicFileAttributes attrs) throws IOException {
-                Files.delete(file);
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult postVisitDirectory(Path dir,
-                    IOException exc) throws IOException {
-                Files.delete(dir);
-                return FileVisitResult.CONTINUE;
-            }
-        });
     }
 }

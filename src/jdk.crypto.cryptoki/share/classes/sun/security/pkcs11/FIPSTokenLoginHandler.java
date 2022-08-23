@@ -124,7 +124,7 @@ final class FIPSTokenLoginHandler implements CallbackHandler {
 
     /*
      * This method extracts the token PIN from the first line of a password
-     * file in the same way than NSS modutil. See for example the -newpwfile
+     * file in the same way as NSS modutil. See for example the -newpwfile
      * argument used to change the password for an NSS DB.
      */
     private static String getPinFromFile(Path f) throws ProviderException {
