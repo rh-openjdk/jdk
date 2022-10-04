@@ -64,7 +64,7 @@ public final class P11Util {
         public static void addPbkdf2Data(String algo, long kdfMech,
                                          long prfMech) {
             kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    "Generic", -1, Operation.GENERIC));
+                    algo, -1, Operation.GENERIC));
         }
 
         public static void addPbkdf2AesData(String algo, long kdfMech,
