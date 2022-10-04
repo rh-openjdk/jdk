@@ -422,6 +422,7 @@ void freeCKMechanismPtr(CK_MECHANISM_PTR mechPtr) {
                  case CKM_NSS_PKCS12_PBE_SHA256_HMAC_KEY_GEN:
                  case CKM_NSS_PKCS12_PBE_SHA384_HMAC_KEY_GEN:
                  case CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN:
+                     TRACE0("[ CK_PBE_PARAMS ]\n");
                      free(((CK_PBE_PARAMS_PTR)tmp)->pInitVector);
                      free(((CK_PBE_PARAMS_PTR)tmp)->pPassword);
                      free(((CK_PBE_PARAMS_PTR)tmp)->pSalt);
