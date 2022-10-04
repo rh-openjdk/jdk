@@ -73,8 +73,8 @@ public final class P11Util {
                     "AES", keyLen, Operation.ENCRYPTION));
         }
 
-        public static void addPkcs12KDData(String algo, long kdfMech,
-                                         int keyLen) {
+        public static void addPkcs12KDMacData(String algo, long kdfMech,
+                                              int keyLen) {
             kdfDataMap.put(algo, new KDFData(kdfMech, -1,
                     "Generic", keyLen, Operation.AUTHENTICATION));
         }
@@ -115,19 +115,19 @@ public final class P11Util {
         KDFData.addPbkdf2Data("PBKDF2WithHmacSHA512",
                 CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA512);
 
-        KDFData.addPkcs12KDData("HmacPBESHA1",
+        KDFData.addPkcs12KDMacData("HmacPBESHA1",
                 CKM_PBA_SHA1_WITH_SHA1_HMAC, 160);
-        KDFData.addPkcs12KDData("HmacPBESHA224",
+        KDFData.addPkcs12KDMacData("HmacPBESHA224",
                 CKM_NSS_PKCS12_PBE_SHA224_HMAC_KEY_GEN, 224);
-        KDFData.addPkcs12KDData("HmacPBESHA256",
+        KDFData.addPkcs12KDMacData("HmacPBESHA256",
                 CKM_NSS_PKCS12_PBE_SHA256_HMAC_KEY_GEN, 256);
-        KDFData.addPkcs12KDData("HmacPBESHA384",
+        KDFData.addPkcs12KDMacData("HmacPBESHA384",
                 CKM_NSS_PKCS12_PBE_SHA384_HMAC_KEY_GEN, 384);
-        KDFData.addPkcs12KDData("HmacPBESHA512",
+        KDFData.addPkcs12KDMacData("HmacPBESHA512",
                 CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
-        KDFData.addPkcs12KDData("HmacPBESHA512/224",
+        KDFData.addPkcs12KDMacData("HmacPBESHA512/224",
                 CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
-        KDFData.addPkcs12KDData("HmacPBESHA512/256",
+        KDFData.addPkcs12KDMacData("HmacPBESHA512/256",
                 CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
     }
 
