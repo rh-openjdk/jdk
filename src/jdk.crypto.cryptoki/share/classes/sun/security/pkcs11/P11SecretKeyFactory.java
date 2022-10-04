@@ -218,6 +218,18 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                             "Key length is invalid for " + algo);
                 }
             }
+            if (itCount < 1) {
+                throw new InvalidKeySpecException(
+                        "Iteration count must be a non-zero positive integer");
+            }
+            if (keySize < 1) {
+                throw new InvalidKeySpecException(
+                        "Key length must be a non-zero positive integer");
+            }
+            if (keySize % 8 != 0) {
+                throw new InvalidKeySpecException(
+                        "Key length (in bits) must be a multiple of 8");
+            }
 
             if (kdfData.kdfMech == CKM_PKCS5_PBKD2) {
                 CK_INFO p11Info = token.p11.getInfo();
