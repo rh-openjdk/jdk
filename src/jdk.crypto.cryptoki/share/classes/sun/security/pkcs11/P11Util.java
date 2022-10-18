@@ -47,11 +47,12 @@ public final class P11Util {
 
     // Used by PBE
     static final class KDFData {
-        public long kdfMech;
-        public long prfMech;
-        public String keyAlgo;
-        public int keyLen;
-        public CK_ATTRIBUTE encrypt_or_sign_true;
+        public final long kdfMech;
+        public final long prfMech;
+        public final String keyAlgo;
+        public final int keyLen;
+        public final CK_ATTRIBUTE encrypt_or_sign_true;
+
         KDFData(long kdfMech, long prfMech, String keyAlgo,
                 int keyLen, CK_ATTRIBUTE encrypt_or_sign_true) {
             this.kdfMech = kdfMech;
