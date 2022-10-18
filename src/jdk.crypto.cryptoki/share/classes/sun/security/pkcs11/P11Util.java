@@ -46,7 +46,7 @@ public final class P11Util {
 
     // Used by PBE
     static final class KDFData {
-        public enum Operation {ENCRYPTION, AUTHENTICATION, GENERIC}
+        public enum Operation {ENCRYPTION, AUTHENTICATION}
         public long kdfMech;
         public long prfMech;
         public String keyAlgo;
@@ -64,7 +64,7 @@ public final class P11Util {
         public static void addPbkdf2Data(String algo, long kdfMech,
                                          long prfMech) {
             kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    algo, -1, Operation.GENERIC));
+                    algo, -1, Operation.AUTHENTICATION));
         }
 
         public static void addPbkdf2AesData(String algo, long kdfMech,

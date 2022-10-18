@@ -283,22 +283,15 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             }
 
             long keyType = getKeyType(kdfData.keyAlgo);
-            CK_ATTRIBUTE[] attrs = new CK_ATTRIBUTE[
+            CK_ATTRIBUTE[] attrs = new CK_ATTRIBUTE[] {
+                    new CK_ATTRIBUTE(CKA_CLASS, CKO_SECRET_KEY),
+                    new CK_ATTRIBUTE(CKA_VALUE_LEN, keySize >> 3),
+                    new CK_ATTRIBUTE(CKA_KEY_TYPE, keyType),
                     switch (kdfData.op) {
-                        case ENCRYPTION, AUTHENTICATION -> 4;
-                        case GENERIC -> 5;
-                    }];
-            attrs[0] = new CK_ATTRIBUTE(CKA_CLASS, CKO_SECRET_KEY);
-            attrs[1] = new CK_ATTRIBUTE(CKA_VALUE_LEN, keySize >> 3);
-            attrs[2] = new CK_ATTRIBUTE(CKA_KEY_TYPE, keyType);
-            switch (kdfData.op) {
-                case ENCRYPTION -> attrs[3] = CK_ATTRIBUTE.ENCRYPT_TRUE;
-                case AUTHENTICATION -> attrs[3] = CK_ATTRIBUTE.SIGN_TRUE;
-                case GENERIC -> {
-                    attrs[3] = CK_ATTRIBUTE.ENCRYPT_TRUE;
-                    attrs[4] = CK_ATTRIBUTE.SIGN_TRUE;
-                }
-            }
+                        case ENCRYPTION -> CK_ATTRIBUTE.ENCRYPT_TRUE;
+                        case AUTHENTICATION -> CK_ATTRIBUTE.SIGN_TRUE;
+                    },
+            };
             CK_ATTRIBUTE[] attr = token.getAttributes(
                     O_GENERATE, CKO_SECRET_KEY, keyType, attrs);
             long keyID = token.p11.C_GenerateKey(session.id(), ckMech, attr);
