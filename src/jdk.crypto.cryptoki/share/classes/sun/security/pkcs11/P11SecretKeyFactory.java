@@ -287,10 +287,7 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                     new CK_ATTRIBUTE(CKA_CLASS, CKO_SECRET_KEY),
                     new CK_ATTRIBUTE(CKA_VALUE_LEN, keySize >> 3),
                     new CK_ATTRIBUTE(CKA_KEY_TYPE, keyType),
-                    switch (kdfData.op) {
-                        case ENCRYPTION -> CK_ATTRIBUTE.ENCRYPT_TRUE;
-                        case AUTHENTICATION -> CK_ATTRIBUTE.SIGN_TRUE;
-                    },
+                    kdfData.encrypt_or_sign_true,
             };
             CK_ATTRIBUTE[] attr = token.getAttributes(
                     O_GENERATE, CKO_SECRET_KEY, keyType, attrs);

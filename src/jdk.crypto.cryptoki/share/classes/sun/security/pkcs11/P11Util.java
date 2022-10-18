@@ -29,6 +29,7 @@ import java.math.BigInteger;
 import java.security.*;
 import java.util.HashMap;
 import java.util.Map;
+import sun.security.pkcs11.wrapper.CK_ATTRIBUTE;
 
 import static sun.security.pkcs11.wrapper.PKCS11Constants.*;
 
@@ -46,37 +47,36 @@ public final class P11Util {
 
     // Used by PBE
     static final class KDFData {
-        public enum Operation {ENCRYPTION, AUTHENTICATION}
         public long kdfMech;
         public long prfMech;
         public String keyAlgo;
         public int keyLen;
-        public Operation op;
+        public CK_ATTRIBUTE encrypt_or_sign_true;
         KDFData(long kdfMech, long prfMech, String keyAlgo,
-                int keyLen, Operation op) {
+                int keyLen, CK_ATTRIBUTE encrypt_or_sign_true) {
             this.kdfMech = kdfMech;
             this.prfMech = prfMech;
             this.keyAlgo = keyAlgo;
             this.keyLen = keyLen;
-            this.op = op;
+            this.encrypt_or_sign_true = encrypt_or_sign_true;
         }
 
         public static void addPbkdf2Data(String algo, long kdfMech,
                                          long prfMech) {
             kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    algo, -1, Operation.AUTHENTICATION));
+                    algo, -1, CK_ATTRIBUTE.SIGN_TRUE));
         }
 
         public static void addPbkdf2AesData(String algo, long kdfMech,
                                             long prfMech, int keyLen) {
             kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    "AES", keyLen, Operation.ENCRYPTION));
+                    "AES", keyLen, CK_ATTRIBUTE.ENCRYPT_TRUE));
         }
 
         public static void addPkcs12KDMacData(String algo, long kdfMech,
                                               int keyLen) {
             kdfDataMap.put(algo, new KDFData(kdfMech, -1,
-                    "Generic", keyLen, Operation.AUTHENTICATION));
+                    "Generic", keyLen, CK_ATTRIBUTE.SIGN_TRUE));
         }
     }
 
