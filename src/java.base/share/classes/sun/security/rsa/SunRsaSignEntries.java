@@ -61,11 +61,9 @@ public final class SunRsaSignEntries {
         // start populating content using the specified provider
         // common attribute map
         HashMap<String, String> attrs = new HashMap<>(3);
-        if (!systemFipsEnabled) {
-            attrs.put("SupportedKeyClasses",
-                    "java.security.interfaces.RSAPublicKey" +
-                    "|java.security.interfaces.RSAPrivateKey");
-        }
+        attrs.put("SupportedKeyClasses",
+                "java.security.interfaces.RSAPublicKey" +
+                "|java.security.interfaces.RSAPrivateKey");
 
         add(p, "KeyFactory", "RSA",
                 "sun.security.rsa.RSAKeyFactory$Legacy",
