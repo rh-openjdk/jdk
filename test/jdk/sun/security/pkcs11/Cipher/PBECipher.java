@@ -57,8 +57,8 @@ public final class PBECipher {
 final class PBECipher2 extends PKCS11Test {
     private static final char[] password = "123456".toCharArray();
     private static final byte[] salt = "abcdefgh".getBytes();
-    private static final byte[] iv = new byte[16];
     private static final int iterations = 1000;
+    private static final byte[] iv = new byte[16];
     private static final String plainText = "This is a know plain text!";
     private static final String sep =
     "=========================================================================";
@@ -67,7 +67,7 @@ final class PBECipher2 extends PKCS11Test {
         // Provide salt and iterations through a PBEParameterSpec instance
         PBEParameterSpec,
 
-        // Provide salt and iterations through a AlgorithmParameters instance
+        // Provide salt and iterations through an AlgorithmParameters instance
         AlgorithmParameters,
 
         // Provide salt and iterations through an anonymous class implementing
@@ -125,33 +125,16 @@ final class PBECipher2 extends PKCS11Test {
         System.out.println("TEST PASS - OK");
     }
 
-    private void testWith(Provider sunPKCS11, String algorithm,
+    private static void testWith(Provider sunPKCS11, String algorithm,
             Configuration conf) throws Exception {
         System.out.println(sep + System.lineSeparator() + algorithm
                 + " (with " + conf.name() + ")");
 
-        Cipher pbeCipher = getCipher(sunPKCS11, algorithm, conf);
-        BigInteger cipherText = new BigInteger(1, pbeCipher.doFinal(
-                plainText.getBytes()));
+        BigInteger cipherText = computeCipherText(sunPKCS11, algorithm, conf);
         printByteArray("Cipher Text", cipherText);
 
-        BigInteger expectedCipherText = null;
-        if (sunJCE != null) {
-            Cipher c = getCipher(sunJCE, algorithm, conf);
-            if (c != null) {
-                expectedCipherText = new BigInteger(1, c.doFinal(
-                        plainText.getBytes()));
-            } else {
-                // Move to assertionData as it's unlikely that any of
-                // the algorithms are available.
-                sunJCE = null;
-            }
-        }
-        if (expectedCipherText == null) {
-            // If SunJCE or the algorithm are not available, assertionData
-            // is used instead.
-            expectedCipherText = assertionData.get(algorithm);
-        }
+        BigInteger expectedCipherText =
+                computeExpectedCipherText(algorithm, conf);
 
         if (!cipherText.equals(expectedCipherText)) {
             printByteArray("Expected Cipher Text", expectedCipherText);
@@ -159,14 +142,9 @@ final class PBECipher2 extends PKCS11Test {
         }
     }
 
-    private Cipher getCipher(Provider p, String algorithm,
+    private static BigInteger computeCipherText(Provider p, String algorithm,
             Configuration conf) throws Exception {
-        Cipher pbeCipher = null;
-        try {
-            pbeCipher = Cipher.getInstance(algorithm, p);
-        } catch (NoSuchAlgorithmException e) {
-            return null;
-        }
+        Cipher pbeCipher = Cipher.getInstance(algorithm, p);
         switch (conf) {
             case PBEParameterSpec, AlgorithmParameters -> {
                 SecretKey key = getPasswordOnlyPBEKey();
@@ -189,7 +167,23 @@ final class PBECipher2 extends PKCS11Test {
                 pbeCipher.init(Cipher.ENCRYPT_MODE, key, new NoRandom());
             }
         }
-        return pbeCipher;
+        return new BigInteger(1, pbeCipher.doFinal(plainText.getBytes()));
+    }
+
+    private static BigInteger computeExpectedCipherText(
+            String algorithm, Configuration conf) throws Exception {
+        if (sunJCE != null) {
+            try {
+                return computeCipherText(sunJCE, algorithm, conf);
+            } catch (NoSuchAlgorithmException e) {
+                // Move to assertionData as it's unlikely that any of
+                // the algorithms are available.
+                sunJCE = null;
+            }
+        }
+        // If SunJCE or the algorithm are not available, assertionData
+        // is used instead.
+        return assertionData.get(algorithm);
     }
 
     private static SecretKey getPasswordOnlyPBEKey() throws Exception {

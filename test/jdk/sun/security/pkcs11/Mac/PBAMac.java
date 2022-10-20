@@ -60,13 +60,15 @@ final class PBAMac2 extends PKCS11Test {
     "=========================================================================";
 
     private static enum Configuration {
-        // Provide salt & iterations through a PBEParameterSpec instance
+        // Provide salt and iterations through a PBEParameterSpec instance
         PBEParameterSpec,
 
-        // Provide salt & iterations through an anonymous class implementing
+        // Provide salt and iterations through an anonymous class implementing
         // the javax.crypto.interfaces.PBEKey interface
         AnonymousPBEKey,
     }
+
+    private static Provider sunJCE = Security.getProvider("SunJCE");
 
     // Generated with SunJCE
     private static final Map<String, BigInteger> assertionData = Map.of(
@@ -84,8 +86,6 @@ final class PBAMac2 extends PKCS11Test {
                     "e8373c980b4072136d2e2810f4e7276024a3e9081cc1", 16)
             );
 
-    private static Provider sunJCE = Security.getProvider("SunJCE");
-
     public void main(Provider sunPKCS11) throws Exception {
         System.out.println("SunPKCS11: " + sunPKCS11.getName());
         for (Configuration conf : Configuration.values()) {
@@ -98,7 +98,7 @@ final class PBAMac2 extends PKCS11Test {
         System.out.println("TEST PASS - OK");
     }
 
-    private void testWith(Provider sunPKCS11, String algorithm,
+    private static void testWith(Provider sunPKCS11, String algorithm,
             Configuration conf) throws Exception {
         System.out.println(sep + System.lineSeparator() + algorithm
                 + " (with " + conf.name() + ")");
@@ -114,14 +114,9 @@ final class PBAMac2 extends PKCS11Test {
         }
     }
 
-    private BigInteger computeMac(Provider p, String algorithm,
+    private static BigInteger computeMac(Provider p, String algorithm,
             Configuration conf) throws Exception {
-        Mac pbaMac;
-        try {
-            pbaMac = Mac.getInstance(algorithm, p);
-        } catch (NoSuchAlgorithmException e) {
-            return null;
-        }
+        Mac pbaMac = Mac.getInstance(algorithm, p);
         switch (conf) {
             case PBEParameterSpec -> {
                 SecretKey key = getPasswordOnlyPBEKey();
@@ -135,16 +130,16 @@ final class PBAMac2 extends PKCS11Test {
         return new BigInteger(1, pbaMac.doFinal(plainText.getBytes()));
     }
 
-    private BigInteger computeExpectedMac(String algorithm, Configuration conf)
-            throws Exception {
+    private static BigInteger computeExpectedMac(
+            String algorithm, Configuration conf) throws Exception {
         if (sunJCE != null) {
-            BigInteger macResult = computeMac(sunJCE, algorithm, conf);
-            if (macResult != null) {
-                return macResult;
+            try {
+                return computeMac(sunJCE, algorithm, conf);
+            } catch (NoSuchAlgorithmException e) {
+                // Move to assertionData as it's unlikely that any of
+                // the algorithms are available.
+                sunJCE = null;
             }
-            // Move to assertionData as it's unlikely that any of
-            // the algorithms are available.
-            sunJCE = null;
         }
         // If SunJCE or the algorithm are not available, assertionData
         // is used instead.
