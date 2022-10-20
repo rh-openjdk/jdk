@@ -63,6 +63,10 @@ final class PBAMac2 extends PKCS11Test {
         // Provide salt and iterations through a PBEParameterSpec instance
         PBEParameterSpec,
 
+        // Derive the key using SunPKCS11's SecretKeyFactory, providing salt
+        // & iterations through a PBEParameterSpec, then use the derived key
+        SunPKCS11SecretKeyFactoryDerivedKey,
+
         // Provide salt and iterations through an anonymous class implementing
         // the javax.crypto.interfaces.PBEKey interface
         AnonymousPBEKey,
@@ -122,6 +126,10 @@ final class PBAMac2 extends PKCS11Test {
                 SecretKey key = getPasswordOnlyPBEKey();
                 pbaMac.init(key, new PBEParameterSpec(salt, iterations));
             }
+            case SunPKCS11SecretKeyFactoryDerivedKey -> {
+                SecretKey key = getDerivedSecretKey(p, algorithm);
+                pbaMac.init(key);
+            }
             case AnonymousPBEKey -> {
                 SecretKey key = getPasswordSaltIterationsPBEKey();
                 pbaMac.init(key);
@@ -147,8 +155,18 @@ final class PBAMac2 extends PKCS11Test {
     }
 
     private static SecretKey getPasswordOnlyPBEKey() throws Exception {
-        PBEKeySpec keySpec = new PBEKeySpec(password);
-        SecretKeyFactory skFac = SecretKeyFactory.getInstance("PBE");
+        return getSecretKey(new PBEKeySpec(password),
+                SecretKeyFactory.getInstance("PBE"));
+    }
+
+    private static SecretKey getDerivedSecretKey(
+            Provider sunPKCS11, String algorithm) throws Exception {
+        return getSecretKey(new PBEKeySpec(password, salt, iterations),
+                SecretKeyFactory.getInstance(algorithm, sunPKCS11));
+    }
+
+    private static SecretKey getSecretKey(
+            PBEKeySpec keySpec, SecretKeyFactory skFac) throws Exception {
         SecretKey skey = skFac.generateSecret(keySpec);
         keySpec.clearPassword();
         return skey;
