@@ -140,13 +140,15 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
         if (key instanceof SecretKey == false) {
             throw new InvalidKeyException("Key must be a SecretKey");
         }
+
+        final String keyAlgo = key.getAlgorithm();
         long algoType;
         if (algo == null) {
-            algo = key.getAlgorithm();
+            algo = keyAlgo;
             algoType = getKeyType(algo);
         } else {
             algoType = getKeyType(algo);
-            long keyAlgorithmType = getKeyType(key.getAlgorithm());
+            long keyAlgorithmType = getKeyType(keyAlgo);
             if (algoType != keyAlgorithmType) {
                 if ((algoType == PCKK_HMAC) || (algoType == PCKK_SSLMAC)) {
                     // ignore key algorithm for MACs

@@ -133,17 +133,15 @@ final class P11PBECipher extends CipherSpi {
                     throws InvalidKeyException,
                     InvalidAlgorithmParameterException {
 
-        PBEKeySpec pbeSpec = pbes2Helper.getPBEKeySpec(blkSize, keyLen,
-                opmode, key, params, random);
-
-        Key derivedKey;
+        PBEKeySpec pbeSpec = pbes2Helper.getPBEKeySpec(
+                blkSize, keyLen, opmode, key, params, random);
         try {
-            derivedKey = P11SecretKeyFactory.derivePBEKey(
-                    token, pbeSpec, pbeAlg);
+            key = P11SecretKeyFactory.derivePBEKey(token, pbeSpec, pbeAlg);
         } catch (InvalidKeySpecException e) {
             throw new InvalidKeyException(e);
         }
-        cipher.engineInit(opmode, derivedKey, pbes2Helper.getIvSpec(), random);
+        params = pbes2Helper.getIvSpec();
+        cipher.engineInit(opmode, key, params, random);
     }
 
     // see JCE spec
