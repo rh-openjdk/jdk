@@ -77,7 +77,7 @@ public final class P11Util {
         public static void addPkcs12KDMacData(String algo, long kdfMech,
                                               int keyLen) {
             kdfDataMap.put(algo, new KDFData(kdfMech, -1,
-                    "Generic", keyLen, CK_ATTRIBUTE.SIGN_TRUE));
+                    "HMAC", keyLen, CK_ATTRIBUTE.SIGN_TRUE));
         }
     }
 

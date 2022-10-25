@@ -284,17 +284,17 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                         new CK_PBE_PARAMS(expPassword, salt, itCount));
             }
 
-            long keyType = getKeyType(kdfData.keyAlgo);
             CK_ATTRIBUTE[] attrs = new CK_ATTRIBUTE[] {
                     new CK_ATTRIBUTE(CKA_CLASS, CKO_SECRET_KEY),
                     new CK_ATTRIBUTE(CKA_VALUE_LEN, keySize >> 3),
-                    new CK_ATTRIBUTE(CKA_KEY_TYPE, keyType),
+                    new CK_ATTRIBUTE(CKA_KEY_TYPE,
+                            getPKCS11KeyType(kdfData.keyAlgo)),
                     kdfData.encrypt_or_sign_true,
             };
-            CK_ATTRIBUTE[] attr = token.getAttributes(
-                    O_GENERATE, CKO_SECRET_KEY, keyType, attrs);
+            CK_ATTRIBUTE[] attr = token.getAttributes(O_GENERATE,
+                    CKO_SECRET_KEY, getKeyType(kdfData.keyAlgo), attrs);
             long keyID = token.p11.C_GenerateKey(session.id(), ckMech, attr);
-            return (P11Key) P11Key.pbeKey(session, keyID, kdfData.keyAlgo,
+            return (P11Key) P11Key.pbeKey(session, keyID, algo,
                     keySize, attr, password, salt, itCount);
         } catch (PKCS11Exception e) {
             throw new InvalidKeySpecException("Could not create key", e);
