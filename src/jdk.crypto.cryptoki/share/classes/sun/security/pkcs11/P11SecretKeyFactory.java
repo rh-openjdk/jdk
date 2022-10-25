@@ -142,6 +142,16 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
         }
 
         final String keyAlgo = key.getAlgorithm();
+        if (key instanceof PBEKey && keyAlgo != null && algo != null) {
+            P11Util.KDFData kdfData = P11Util.kdfDataMap.get(keyAlgo);
+            if (kdfData != null && (keyAlgo.equals(algo) ||
+                    kdfData.keyAlgo.equals(algo))) {
+                return key instanceof P11Key ?
+                        (P11Key) key : // already derived
+                        derivePBEKey(token, (PBEKey) key, algo);
+            }
+        }
+
         long algoType;
         if (algo == null) {
             algo = keyAlgo;
@@ -505,9 +515,6 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
     // see JCE spec
     protected SecretKey engineTranslateKey(SecretKey key)
             throws InvalidKeyException {
-        if (key instanceof PBEKey) {
-            return (SecretKey)derivePBEKey(token, (PBEKey)key, algorithm);
-        }
         return (SecretKey)convertKey(token, key, algorithm);
     }
 
