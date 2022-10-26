@@ -31,7 +31,9 @@ import java.security.Security;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.interfaces.PBEKey;
 import javax.crypto.spec.PBEKeySpec;
 
 /*
@@ -57,6 +59,15 @@ final class TestPBKD2 extends PKCS11Test {
     private static final int iterations = 1000;
     private static final String sep =
     "=========================================================================";
+
+    private static enum Configuration {
+        // Provide salt and iterations through a PBEKeySpec instance
+        PBEKeySpec,
+
+        // Provide salt and iterations through an anonymous class implementing
+        // the javax.crypto.interfaces.PBEKey interface
+        AnonymousPBEKey,
+    }
 
     private static Provider sunJCE = Security.getProvider("SunJCE");
 
@@ -202,73 +213,88 @@ final class TestPBKD2 extends PKCS11Test {
 
     public void main(Provider sunPKCS11) throws Exception {
         System.out.println("SunPKCS11: " + sunPKCS11.getName());
-        testWith(sunPKCS11, "HmacPBESHA1",
-                new P12PBKDAssertData(20, "SHA-1", 64));
-        testWith(sunPKCS11, "HmacPBESHA224",
-                new P12PBKDAssertData(28, "SHA-224", 64));
-        testWith(sunPKCS11, "HmacPBESHA256",
-                new P12PBKDAssertData(32, "SHA-256", 64));
-        testWith(sunPKCS11, "HmacPBESHA384",
-                new P12PBKDAssertData(48, "SHA-384", 128));
-        testWith(sunPKCS11, "HmacPBESHA512",
-                new P12PBKDAssertData(64, "SHA-512", 128));
+        for (Configuration conf : Configuration.values()) {
+            testWith(sunPKCS11, "HmacPBESHA1",
+                    new P12PBKDAssertData(20, "SHA-1", 64), conf);
+            testWith(sunPKCS11, "HmacPBESHA224",
+                    new P12PBKDAssertData(28, "SHA-224", 64), conf);
+            testWith(sunPKCS11, "HmacPBESHA256",
+                    new P12PBKDAssertData(32, "SHA-256", 64), conf);
+            testWith(sunPKCS11, "HmacPBESHA384",
+                    new P12PBKDAssertData(48, "SHA-384", 128), conf);
+            testWith(sunPKCS11, "HmacPBESHA512",
+                    new P12PBKDAssertData(64, "SHA-512", 128), conf);
 
-        testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_128",
-                new PBKD2AssertData("PBKDF2WithHmacSHA1", 128));
-        testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_128",
-                new PBKD2AssertData("PBKDF2WithHmacSHA224", 128));
-        testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_128",
-                new PBKD2AssertData("PBKDF2WithHmacSHA256", 128));
-        testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_128",
-                new PBKD2AssertData("PBKDF2WithHmacSHA384", 128));
-        testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_128",
-                new PBKD2AssertData("PBKDF2WithHmacSHA512", 128));
-        testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_256",
-                new PBKD2AssertData("PBKDF2WithHmacSHA1", 256));
-        testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_256",
-                new PBKD2AssertData("PBKDF2WithHmacSHA224", 256));
-        testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_256",
-                new PBKD2AssertData("PBKDF2WithHmacSHA256", 256));
-        testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_256",
-                new PBKD2AssertData("PBKDF2WithHmacSHA384", 256));
-        testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_256",
-                new PBKD2AssertData("PBKDF2WithHmacSHA512", 256));
+            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_128",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA1", 128), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_128",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA224", 128), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_128",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA256", 128), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_128",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA384", 128), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_128",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA512", 128), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_256",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA1", 256), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_256",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA224", 256), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_256",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA256", 256), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_256",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA384", 256), conf);
+            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_256",
+                    new PBKD2AssertData("PBKDF2WithHmacSHA512", 256), conf);
 
-        // Use 1,5 * digest size as the testing derived key length (in bits)
-        testWith(sunPKCS11, "PBKDF2WithHmacSHA1", 240,
-                new PBKD2AssertData("PBKDF2WithHmacSHA1"));
-        testWith(sunPKCS11, "PBKDF2WithHmacSHA224", 336,
-                new PBKD2AssertData("PBKDF2WithHmacSHA224"));
-        testWith(sunPKCS11, "PBKDF2WithHmacSHA256", 384,
-                new PBKD2AssertData("PBKDF2WithHmacSHA256"));
-        testWith(sunPKCS11, "PBKDF2WithHmacSHA384", 576,
-                new PBKD2AssertData("PBKDF2WithHmacSHA384"));
-        testWith(sunPKCS11, "PBKDF2WithHmacSHA512", 768,
-                new PBKD2AssertData("PBKDF2WithHmacSHA512"));
-
+            // Use 1,5 * digest size as the testing derived key length (in bits)
+            testWith(sunPKCS11, "PBKDF2WithHmacSHA1", 240,
+                    new PBKD2AssertData("PBKDF2WithHmacSHA1"), conf);
+            testWith(sunPKCS11, "PBKDF2WithHmacSHA224", 336,
+                    new PBKD2AssertData("PBKDF2WithHmacSHA224"), conf);
+            testWith(sunPKCS11, "PBKDF2WithHmacSHA256", 384,
+                    new PBKD2AssertData("PBKDF2WithHmacSHA256"), conf);
+            testWith(sunPKCS11, "PBKDF2WithHmacSHA384", 576,
+                    new PBKD2AssertData("PBKDF2WithHmacSHA384"), conf);
+            testWith(sunPKCS11, "PBKDF2WithHmacSHA512", 768,
+                    new PBKD2AssertData("PBKDF2WithHmacSHA512"), conf);
+        }
         System.out.println("TEST PASS - OK");
     }
 
     private static void testWith(Provider sunPKCS11, String algorithm,
-            AssertData assertData) throws Exception {
+            AssertData assertData, Configuration conf) throws Exception {
+        SecretKey key = getPasswordSaltIterationsPBEKey(algorithm);
         PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations);
-        testWith(sunPKCS11, algorithm, keySpec, assertData);
+        testWith(sunPKCS11, algorithm, key, keySpec, assertData, conf);
     }
 
     private static void testWith(Provider sunPKCS11, String algorithm,
-            int keyLen, AssertData assertData) throws Exception {
+            int keyLen, AssertData assertData, Configuration conf)
+            throws Exception {
+        if (conf == Configuration.AnonymousPBEKey) {
+            // Skip, we can't specify the key length in this scenario, and
+            // we would get "Key length must be a non-zero positive integer"
+            return;
+        }
         PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations, keyLen);
-        testWith(sunPKCS11, algorithm, keySpec, assertData);
+        testWith(sunPKCS11, algorithm, null, keySpec, assertData, conf);
     }
 
     private static void testWith(Provider sunPKCS11, String algorithm,
-            PBEKeySpec keySpec, AssertData assertData) throws Exception {
-        System.out.println(sep + System.lineSeparator() + algorithm);
+            SecretKey key, PBEKeySpec keySpec, AssertData assertData,
+            Configuration conf)
+            throws Exception {
+        System.out.println(sep + System.lineSeparator() + algorithm
+                + " (with " + conf.name() + ")");
 
         SecretKeyFactory skFac = SecretKeyFactory.getInstance(
                 algorithm, sunPKCS11);
-        BigInteger derivedKey = new BigInteger(1,
-                skFac.generateSecret(keySpec).getEncoded());
+
+        SecretKey derivedKeyObj = switch (conf) {
+            case PBEKeySpec -> skFac.generateSecret(keySpec);
+            case AnonymousPBEKey -> skFac.translateKey(key);
+        };
+        BigInteger derivedKey = new BigInteger(1, derivedKeyObj.getEncoded());
         printByteArray("Derived Key", derivedKey);
 
         BigInteger expectedDerivedKey = assertData.derive(algorithm, keySpec);
@@ -277,6 +303,17 @@ final class TestPBKD2 extends PKCS11Test {
             printByteArray("Expected Derived Key", expectedDerivedKey);
             throw new Exception("Expected Derived Key did not match");
         }
+    }
+
+    private static SecretKey getPasswordSaltIterationsPBEKey(String algorithm) {
+        return new PBEKey() {
+            public byte[] getSalt() { return salt.clone(); }
+            public int getIterationCount() { return iterations; }
+            public String getAlgorithm() { return algorithm; }
+            public String getFormat() { return "RAW"; }
+            public char[] getPassword() { return password.clone(); }
+            public byte[] getEncoded() { return null; } // unused
+        };
     }
 
     private static void printByteArray(String title, BigInteger b) {
