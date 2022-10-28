@@ -32,7 +32,6 @@ import java.security.cert.*;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.net.ssl.*;
-import jdk.internal.access.SharedSecrets;
 import sun.security.action.GetPropertyAction;
 import sun.security.provider.certpath.AlgorithmChecker;
 import sun.security.validator.Validator;
