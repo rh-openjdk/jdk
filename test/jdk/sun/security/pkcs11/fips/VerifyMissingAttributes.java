@@ -24,8 +24,6 @@
 
 import java.security.Provider;
 import java.security.Security;
-import java.util.HashMap;
-import java.util.Map;
 
 /*
  * @test
@@ -49,41 +47,31 @@ public final class VerifyMissingAttributes {
     };
 
     public static void main(String[] args) throws Throwable {
-        Map<String, String> attrs = new HashMap<>();
         Provider sunProvider = Security.getProvider("SUN");
         for (String svcAlg : svcAlgImplementedIn) {
-            attrs.clear();
-            attrs.put(svcAlg + " ImplementedIn", "Software");
-            doQuery(sunProvider, attrs);
+            String filter = svcAlg + " ImplementedIn:Software";
+            doQuery(sunProvider, filter);
         }
         if (Double.parseDouble(
                 System.getProperty("java.specification.version")) >= 17) {
-            attrs.clear();
-            attrs.put("KeyFactory.RSASSA-PSS SupportedKeyClasses",
+            String filter = "KeyFactory.RSASSA-PSS SupportedKeyClasses:" +
                     "java.security.interfaces.RSAPublicKey" +
-                            "|java.security.interfaces.RSAPrivateKey");
-            doQuery(Security.getProvider("SunRsaSign"), attrs);
+                    "|java.security.interfaces.RSAPrivateKey";
+            doQuery(Security.getProvider("SunRsaSign"), filter);
         }
         System.out.println("TEST PASS - OK");
     }
 
-    private static void doQuery(Provider expectedProvider,
-                Map<String, String> attrs) throws Exception {
+    private static void doQuery(Provider expectedProvider, String filter)
+            throws Exception {
         if (expectedProvider == null) {
             throw new Exception("Provider not found.");
         }
-        Provider[] providers = Security.getProviders(attrs);
+        Provider[] providers = Security.getProviders(filter);
         if (providers == null || providers.length != 1 ||
                 providers[0] != expectedProvider) {
-            StringBuffer sb = new StringBuffer();
-            attrs.entrySet().stream().forEach(ent -> {
-                sb.append(ent.getKey());
-                sb.append(": ");
-                sb.append(ent.getValue());
-                sb.append(System.lineSeparator());
-            });
             throw new Exception("Failure retrieving the provider with this" +
-                    " query: " + sb.toString());
+                    " query: " + filter);
         }
     }
 }
