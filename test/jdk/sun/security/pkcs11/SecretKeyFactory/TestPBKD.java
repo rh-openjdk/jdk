@@ -295,12 +295,12 @@ final class TestPBKD2 extends PKCS11Test {
             case AnonymousPBEKey -> skFac.translateKey(key);
         };
         BigInteger derivedKey = new BigInteger(1, derivedKeyObj.getEncoded());
-        printByteArray("Derived Key", derivedKey);
+        printHex("Derived Key", derivedKey);
 
         BigInteger expectedDerivedKey = assertData.derive(algorithm, keySpec);
 
         if (!derivedKey.equals(expectedDerivedKey)) {
-            printByteArray("Expected Derived Key", expectedDerivedKey);
+            printHex("Expected Derived Key", expectedDerivedKey);
             throw new Exception("Expected Derived Key did not match");
         }
     }
@@ -316,7 +316,7 @@ final class TestPBKD2 extends PKCS11Test {
         };
     }
 
-    private static void printByteArray(String title, BigInteger b) {
+    private static void printHex(String title, BigInteger b) {
         String repr = (b == null) ? "buffer is null" : b.toString(16);
         System.out.println(title + ": " + repr + System.lineSeparator());
     }

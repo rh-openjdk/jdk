@@ -108,12 +108,12 @@ final class PBAMac2 extends PKCS11Test {
                 + " (with " + conf.name() + ")");
 
         BigInteger macResult = computeMac(sunPKCS11, algorithm, conf);
-        printByteArray("HMAC Result", macResult);
+        printHex("HMAC Result", macResult);
 
         BigInteger expectedMacResult = computeExpectedMac(algorithm, conf);
 
         if (!macResult.equals(expectedMacResult)) {
-            printByteArray("Expected HMAC Result", expectedMacResult);
+            printHex("Expected HMAC Result", expectedMacResult);
             throw new Exception("Expected HMAC Result did not match");
         }
     }
@@ -183,7 +183,7 @@ final class PBAMac2 extends PKCS11Test {
         };
     }
 
-    private static void printByteArray(String title, BigInteger b) {
+    private static void printHex(String title, BigInteger b) {
         String repr = (b == null) ? "buffer is null" : b.toString(16);
         System.out.println(title + ": " + repr + System.lineSeparator());
     }

@@ -138,13 +138,13 @@ final class PBECipher2 extends PKCS11Test {
                 + " (with " + conf.name() + ")");
 
         BigInteger cipherText = computeCipherText(sunPKCS11, algorithm, conf);
-        printByteArray("Cipher Text", cipherText);
+        printHex("Cipher Text", cipherText);
 
         BigInteger expectedCipherText =
                 computeExpectedCipherText(algorithm, conf);
 
         if (!cipherText.equals(expectedCipherText)) {
-            printByteArray("Expected Cipher Text", expectedCipherText);
+            printHex("Expected Cipher Text", expectedCipherText);
             throw new Exception("Expected Cipher Text did not match");
         }
     }
@@ -230,7 +230,7 @@ final class PBECipher2 extends PKCS11Test {
         };
     }
 
-    private static void printByteArray(String title, BigInteger b) {
+    private static void printHex(String title, BigInteger b) {
         String repr = (b == null) ? "buffer is null" : b.toString(16);
         System.out.println(title + ": " + repr + System.lineSeparator());
     }
