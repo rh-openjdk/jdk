@@ -313,6 +313,22 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
         }
     }
 
+    private static PBEKeySpec getPbeKeySpec(PBEKey pbeKey) {
+        int keyLength = 0;
+        if ("RAW".equals(pbeKey.getFormat())) {
+            byte[] encoded = pbeKey.getEncoded();
+            if (encoded != null) {
+                keyLength = encoded.length << 3;
+            }
+        }
+        int ic = pbeKey.getIterationCount();
+        char[] pwd = pbeKey.getPassword();
+        byte[] salt = pbeKey.getSalt();
+        return keyLength == 0 ?
+                new PBEKeySpec(pwd, salt, ic) :
+                new PBEKeySpec(pwd, salt, ic, keyLength);
+    }
+
     static P11Key derivePBEKey(Token token, PBEKey key, String algo)
             throws InvalidKeyException {
         token.ensureValid();
@@ -324,8 +340,7 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             return p11Key;
         }
         try {
-            p11Key = derivePBEKey(token, new PBEKeySpec(key.getPassword(),
-                    key.getSalt(), key.getIterationCount()), algo);
+            p11Key = derivePBEKey(token, getPbeKeySpec(key), algo);
         } catch (InvalidKeySpecException e) {
             throw new InvalidKeyException(e);
         }
@@ -507,6 +522,9 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             } catch (InvalidKeyException e) {
                 throw new InvalidKeySpecException(e);
             }
+        } else if (keySpec.isAssignableFrom(PBEKeySpec.class) &&
+                key instanceof PBEKey pbeKey) {
+            return getPbeKeySpec(pbeKey);
         }
         throw new InvalidKeySpecException
                 ("Unsupported spec: " + keySpec.getName());
