@@ -236,6 +236,7 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                 }
             } else {
                 // PKCS #12 "General Method" PBKD (RFC 7292, Appendix B.2)
+                char[] expPassword = password;
                 if (P11Util.isNSS(token)) {
                     // According to PKCS #11, "password" in CK_PBE_PARAMS has
                     // a CK_UTF8CHAR_PTR type. This suggests that it is encoded
@@ -252,22 +253,21 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                     // the high and low parts of each char are split into 2
                     // chars. As an example, this is the transformation for
                     // a NULL terminated password "a":
-                    // char[]    =>        [   0x0061,          0x0000     ]
-                    //                          /    \           /    \
-                    // Expansion =>       [0x0000, 0x0061, 0x0000, 0x0000]
-                    //                         |       |       |       |
-                    // BMPString =>       [  0x00,   0x61,   0x00,   0x00]
+                    //   char[] password    =>  [    0x0061,         0x0000    ]
+                    //                               /    \          /    \
+                    //   char[] expPassword =>  [0x0000, 0x0061, 0x0000, 0x0000]
+                    //                               |       |       |       |
+                    //   byte[] BMPString   =>  [  0x00,   0x61,   0x00,   0x00]
                     //
                     int inputLength = (password == null) ? 0 : password.length;
-                    char[] expPassword = new char[inputLength * 2 + 2];
+                    expPassword = new char[inputLength * 2 + 2];
                     for (int i = 0, j = 0; i < inputLength; i++, j += 2) {
                         expPassword[j] = (char) ((password[i] >>> 8) & 0xFF);
                         expPassword[j + 1] = (char) (password[i] & 0xFF);
                     }
-                    password = expPassword;
                 }
                 ckMech = new CK_MECHANISM(kdfData.kdfMech,
-                        new CK_PBE_PARAMS(password, salt, itCount));
+                        new CK_PBE_PARAMS(expPassword, salt, itCount));
             }
 
             long keyType = getKeyType(kdfData.keyAlgo);
@@ -290,8 +290,8 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             CK_ATTRIBUTE[] attr = token.getAttributes(
                     O_GENERATE, CKO_SECRET_KEY, keyType, attrs);
             long keyID = token.p11.C_GenerateKey(session.id(), ckMech, attr);
-            return (P11Key)P11Key.secretKey(
-                    session, keyID, kdfData.keyAlgo, keySize, attr);
+            return (P11Key) P11Key.pbeKey(session, keyID, kdfData.keyAlgo,
+                    keySize, attr, password, salt, itCount);
         } catch (PKCS11Exception e) {
             throw new InvalidKeySpecException("Could not create key", e);
         } finally {

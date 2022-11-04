@@ -341,6 +341,18 @@ abstract class P11Key implements Key, Length {
                 attributes);
     }
 
+    static SecretKey pbeKey(Session session, long keyID, String algorithm,
+            int keyLength, CK_ATTRIBUTE[] attributes,
+            char[] password, byte[] salt, int iterationCount) {
+        attributes = getAttributes(session, keyID, attributes, new CK_ATTRIBUTE[] {
+            new CK_ATTRIBUTE(CKA_TOKEN),
+            new CK_ATTRIBUTE(CKA_SENSITIVE),
+            new CK_ATTRIBUTE(CKA_EXTRACTABLE),
+        });
+        return new P11PBEKey(session, keyID, algorithm, keyLength,
+                attributes, password, salt, iterationCount);
+    }
+
     static SecretKey masterSecretKey(Session session, long keyID, String algorithm,
             int keyLength, CK_ATTRIBUTE[] attributes, int major, int minor) {
         attributes = getAttributes(session, keyID, attributes, new CK_ATTRIBUTE[] {
@@ -504,6 +516,36 @@ abstract class P11Key implements Key, Length {
                 }
             }
             return b;
+        }
+    }
+
+    private static class P11PBEKey extends P11SecretKey implements PBEKey {
+        private static final long serialVersionUID = -7828241727014329084L;
+        private final char[] password;
+        private final byte[] salt;
+        private final int iterationCount;
+        P11PBEKey(Session session, long keyID, String algorithm,
+                int keyLength, CK_ATTRIBUTE[] attributes,
+                char[] password, byte[] salt, int iterationCount) {
+            super(session, keyID, algorithm, keyLength, attributes);
+            this.password = password;
+            this.salt = salt;
+            this.iterationCount = iterationCount;
+        }
+
+        @Override
+        public char[] getPassword() {
+            return password;
+        }
+
+        @Override
+        public byte[] getSalt() {
+            return salt;
+        }
+
+        @Override
+        public int getIterationCount() {
+            return iterationCount;
         }
     }
 
