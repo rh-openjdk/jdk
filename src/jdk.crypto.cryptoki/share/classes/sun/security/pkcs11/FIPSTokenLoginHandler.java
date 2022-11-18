@@ -72,22 +72,22 @@ final class FIPSTokenLoginHandler implements CallbackHandler {
                 throw new ProviderException("Invalid " + FIPS_NSSDB_PIN_PROP +
                         " property value.");
             }
-            String prefix = pinPropParts[0].toUpperCase();
+            String prefix = pinPropParts[0].toLowerCase();
             String value = pinPropParts[1];
             String pin = null;
-            if (prefix.equals("ENV")) {
+            if (prefix.equals("env")) {
                 if (debug != null) {
                     debug.println("FIPS: PIN value from the '" + value +
                             "' environment variable.");
                 }
                 pin = System.getenv(value);
-            } else if (prefix.equals("FILE")) {
+            } else if (prefix.equals("file")) {
                 if (debug != null) {
                     debug.println("FIPS: PIN value from the '" + value +
                             "' file.");
                 }
                 pin = getPinFromFile(Paths.get(value));
-            } else if (prefix.equals("PIN")) {
+            } else if (prefix.equals("pin")) {
                 if (debug != null) {
                     debug.println("FIPS: PIN value from the " +
                             FIPS_NSSDB_PIN_PROP + " property.");
