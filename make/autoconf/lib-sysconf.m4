@@ -32,8 +32,10 @@ AC_DEFUN_ONCE([LIB_SETUP_SYSCONF_LIBS],
   #
   # Check for the NSS library
   #
+  AC_MSG_CHECKING([for NSS library directory])
+  PKG_CHECK_VAR(NSS_LIBDIR, nss, libdir, [AC_MSG_RESULT([$NSS_LIBDIR])], [AC_MSG_RESULT([not found])])
 
-  AC_MSG_CHECKING([whether to use the system NSS library with the System Configurator (libsysconf)])
+  AC_MSG_CHECKING([whether to link the system NSS library with the System Configurator (libsysconf)])
 
   # default is not available
   DEFAULT_SYSCONF_NSS=no
@@ -81,4 +83,5 @@ AC_DEFUN_ONCE([LIB_SETUP_SYSCONF_LIBS],
       fi
   fi
   AC_SUBST(USE_SYSCONF_NSS)
+  AC_SUBST(NSS_LIBDIR)
 ])

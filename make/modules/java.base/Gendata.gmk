@@ -98,3 +98,17 @@ $(GENDATA_JAVA_SECURITY): $(BUILD_TOOLS_JDK) $(GENDATA_JAVA_SECURITY_SRC) $(REST
 TARGETS += $(GENDATA_JAVA_SECURITY)
 
 ################################################################################
+
+GENDATA_NSS_FIPS_CFG_SRC := $(TOPDIR)/src/java.base/share/conf/security/nss.fips.cfg.in
+GENDATA_NSS_FIPS_CFG := $(SUPPORT_OUTPUTDIR)/modules_conf/java.base/security/nss.fips.cfg
+
+$(GENDATA_NSS_FIPS_CFG): $(GENDATA_NSS_FIPS_CFG_SRC)
+	$(call LogInfo, Generating nss.fips.cfg)
+	$(call MakeTargetDir)
+	$(call ExecuteWithLog, $(SUPPORT_OUTPUTDIR)/gensrc/java.base/_$(@F), \
+	    ( $(SED) -e 's:@NSS_LIBDIR@:$(NSS_LIBDIR):g' $< ) > $@ \
+	)
+
+TARGETS += $(GENDATA_NSS_FIPS_CFG)
+
+################################################################################
