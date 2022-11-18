@@ -1,7 +1,7 @@
 name = NSS-FIPS
 nssLibraryDirectory = @NSS_LIBDIR@
-nssSecmodDirectory = sql:/etc/pki/nssdb
-nssDbMode = readOnly
+nssSecmodDirectory = ${fips.nssdb.path}
+nssDbMode = readWrite
 nssModule = fips
 
 attributes(*,CKO_SECRET_KEY,CKK_GENERIC_SECRET)={ CKA_SIGN=true }
