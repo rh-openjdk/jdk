@@ -119,7 +119,7 @@ final class FIPSTokenLoginHandler implements CallbackHandler {
         if (debug != null) {
             debug.println("FIPS: empty PIN.");
         }
-        return new char[] {};
+        return null;
     }
 
     /*

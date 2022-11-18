@@ -181,15 +181,19 @@ public final class NssdbPin {
                     .forName("sun.security.pkcs11.FIPSTokenLoginHandler");
             Method m = c.getDeclaredMethod("getFipsNssdbPin");
             m.setAccessible(true);
+            String pin = null;
             char[] pinChar = (char[]) m.invoke(c);
-            byte[] pinUtf8 = new byte[pinChar.length];
-            for (int i = 0; i < pinUtf8.length; i++) {
-                pinUtf8[i] = (byte) pinChar[i];
+            if (pinChar != null) {
+                byte[] pinUtf8 = new byte[pinChar.length];
+                for (int i = 0; i < pinUtf8.length; i++) {
+                    pinUtf8[i] = (byte) pinChar[i];
+                }
+                pin = new String(pinUtf8, StandardCharsets.UTF_8);
             }
-            String pin = new String(pinUtf8, StandardCharsets.UTF_8);
-            if (!pin.equals(expectedPin)) {
-                throw new Exception("PIN is different than expected: " + pin +
-                         " (actual) vs " + expectedPin + " (expected).");
+            if (!expectedPin.isEmpty() && !expectedPin.equals(pin) ||
+                    expectedPin.isEmpty() && pin != null) {
+                throw new Exception("PIN is different than expected: '" + pin +
+                         "' (actual) vs '" + expectedPin + "' (expected).");
             }
             if (DEBUG) {
                 System.out.println("PIN value: " + pin);
