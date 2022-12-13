@@ -26,7 +26,6 @@ import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.Security;
-import java.util.Map;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -55,7 +54,7 @@ final class PBAMac2 extends PKCS11Test {
     private static final char[] password = "123456".toCharArray();
     private static final byte[] salt = "abcdefgh".getBytes();
     private static final int iterations = 1000;
-    private static final String plainText = "This is a know plain text!";
+    private static final String plainText = "This is a known plain text!";
     private static final String sep = "======================================" +
             "===================================";
 
@@ -75,84 +74,93 @@ final class PBAMac2 extends PKCS11Test {
 
     private static Provider sunJCE = Security.getProvider("SunJCE");
 
-    // Generated with SunJCE
-    private static final Map<String, BigInteger> assertionData = Map.of(
-            "HmacPBESHA1", new BigInteger("febd26da5d63ce819770a2af1fc2857e" +
-                    "e2c9c41c", 16),
-            "HmacPBESHA224", new BigInteger("aa6a3a1c35a4b266fea62d1a871508" +
-                    "bd45f8ec326bcf16e09699063", 16),
-            "HmacPBESHA256", new BigInteger("af4d71121fd4e9d52eb42944d99b77" +
-                    "8ff64376fcf6af8d1dca3ec688dfada5c8", 16),
-            "HmacPBESHA384", new BigInteger("5d6d37764205985ffca7e4a6222752" +
-                    "a8bbd0520858da08ecafdc57e6246894675e375b9ba084f9ce7142" +
-                    "35f202cc3452", 16),
-            "HmacPBESHA512", new BigInteger("f586c2006cc2de73fd5743e5cca701" +
-                    "c942d3741a7a54a2a649ea36898996cf3c483f2d734179b47751db" +
-                    "e8373c980b4072136d2e2810f4e7276024a3e9081cc1", 16)
-            );
+    private record AssertionData(String pbeHmacAlgo, String hmacAlgo,
+            BigInteger expectedMac) {}
+
+    private static AssertionData macAssertionData(String pbeHmacAlgo,
+            String hmacAlgo, String staticExpectedMac) {
+        BigInteger expectedMac = null;
+        if (sunJCE != null) {
+            try {
+                expectedMac = computeMac(sunJCE, pbeHmacAlgo,
+                        pbeHmacAlgo, Configuration.PBEParameterSpec);
+            } catch (GeneralSecurityException e) {
+                // Move to staticExpectedMac as it's unlikely
+                // that any of the algorithms are available.
+                sunJCE = null;
+            }
+        }
+        if (expectedMac == null) {
+            expectedMac = new BigInteger(staticExpectedMac, 16);
+        }
+        return new AssertionData(pbeHmacAlgo, hmacAlgo, expectedMac);
+    }
+
+    // Generated with SunJCE.
+    private static final AssertionData[] assertionData = new AssertionData[]{
+            macAssertionData("HmacPBESHA1", "HmacSHA1",
+                    "707606929395e4297adc63d520ac7d22f3f5fa66"),
+            macAssertionData("HmacPBESHA224", "HmacSHA224",
+                    "4ffb5ad4974a7a9fca5a36ebe3e34dd443c07fb68c392f8b611657e6"),
+            macAssertionData("HmacPBESHA256", "HmacSHA256",
+                    "9e8c102c212d2fd1334dc497acb4e002b04e84713b7eda5a63807af2" +
+                    "989d3e50"),
+            macAssertionData("HmacPBESHA384", "HmacSHA384",
+                    "77f31a785d4f2220251143a4ba80f5610d9d0aeaebb4a278b8a7535c" +
+                    "8cea8e8211809ba450458e351c5b66d691839c23"),
+            macAssertionData("HmacPBESHA512", "HmacSHA512",
+                    "a53f942a844b234a69c1f92cba20ef272c4394a3cf4024dc16d9dbac" +
+                    "1969870b1c2b28b897149a1a3b9ad80a7ca8c547dfabf3ed5f144c6b" +
+                    "593900b62e120c45"),
+    };
 
     public void main(Provider sunPKCS11) throws Exception {
         System.out.println("SunPKCS11: " + sunPKCS11.getName());
         for (Configuration conf : Configuration.values()) {
-            testWith(sunPKCS11, "HmacPBESHA1", conf);
-            testWith(sunPKCS11, "HmacPBESHA224", conf);
-            testWith(sunPKCS11, "HmacPBESHA256", conf);
-            testWith(sunPKCS11, "HmacPBESHA384", conf);
-            testWith(sunPKCS11, "HmacPBESHA512", conf);
+            for (AssertionData data : assertionData) {
+                testWith(sunPKCS11, data, true, conf);
+                if (conf != Configuration.PBEParameterSpec) {
+                    testWith(sunPKCS11, data, false, conf);
+                }
+            }
         }
         System.out.println("TEST PASS - OK");
     }
 
-    private static void testWith(Provider sunPKCS11, String algorithm,
-            Configuration conf) throws Exception {
-        System.out.println(sep + System.lineSeparator() + algorithm
+    private static void testWith(Provider sunPKCS11, AssertionData data,
+            boolean testPBEService, Configuration conf) throws Exception {
+        String svcAlgo = testPBEService ? data.pbeHmacAlgo : data.hmacAlgo;
+        System.out.println(sep + System.lineSeparator() + svcAlgo
                 + " (with " + conf.name() + ")");
 
-        BigInteger mac = computeMac(sunPKCS11, algorithm, conf);
+        BigInteger mac = computeMac(sunPKCS11, svcAlgo, data.pbeHmacAlgo, conf);
         printHex("HMAC", mac);
 
-        BigInteger expectedMac = computeExpectedMac(algorithm, conf);
-
-        if (!mac.equals(expectedMac)) {
-            printHex("Expected HMAC", expectedMac);
+        if (!mac.equals(data.expectedMac)) {
+            printHex("Expected HMAC", data.expectedMac);
             throw new Exception("Expected HMAC did not match");
         }
     }
 
-    private static BigInteger computeMac(Provider p, String algorithm,
-            Configuration conf) throws GeneralSecurityException {
-        Mac mac = Mac.getInstance(algorithm, p);
+    private static BigInteger computeMac(Provider p, String svcAlgo,
+            String keyAlgo, Configuration conf)
+            throws GeneralSecurityException {
+        Mac mac = Mac.getInstance(svcAlgo, p);
         switch (conf) {
             case PBEParameterSpec -> {
                 SecretKey key = getPasswordOnlyPBEKey();
                 mac.init(key, new PBEParameterSpec(salt, iterations));
             }
             case SecretKeyFactoryDerivedKey -> {
-                SecretKey key = getDerivedSecretKey(p, algorithm);
+                SecretKey key = getDerivedSecretKey(p, keyAlgo);
                 mac.init(key);
             }
             case AnonymousPBEKey -> {
-                SecretKey key = getAnonymousPBEKey();
+                SecretKey key = getAnonymousPBEKey(keyAlgo);
                 mac.init(key);
             }
         }
         return new BigInteger(1, mac.doFinal(plainText.getBytes()));
-    }
-
-    private static BigInteger computeExpectedMac(String algorithm,
-            Configuration conf) {
-        if (sunJCE != null) {
-            try {
-                return computeMac(sunJCE, algorithm, conf);
-            } catch (GeneralSecurityException e) {
-                // Move to assertionData as it's unlikely that any of
-                // the algorithms are available.
-                sunJCE = null;
-            }
-        }
-        // If SunJCE or the algorithm are not available, assertionData
-        // is used instead.
-        return assertionData.get(algorithm);
     }
 
     private static SecretKey getPasswordOnlyPBEKey()
@@ -167,14 +175,14 @@ final class PBAMac2 extends PKCS11Test {
                 .generateSecret(new PBEKeySpec(password, salt, iterations));
     }
 
-    private static SecretKey getAnonymousPBEKey() {
+    private static SecretKey getAnonymousPBEKey(String algorithm) {
         return new PBEKey() {
             public byte[] getSalt() { return salt.clone(); }
             public int getIterationCount() { return iterations; }
-            public String getAlgorithm() { return "PBE"; }
+            public String getAlgorithm() { return algorithm; }
             public String getFormat() { return "RAW"; }
             public char[] getPassword() { return password.clone(); }
-            public byte[] getEncoded() { return null; } // unused in PBA Mac
+            public byte[] getEncoded() { return null; }
         };
     }
 

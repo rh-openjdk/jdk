@@ -28,7 +28,6 @@ import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.Security;
-import java.util.Map;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -61,7 +60,7 @@ final class PBECipher2 extends PKCS11Test {
     private static final int AES_BLOCK_SIZE = 16;
     private static final PBEParameterSpec pbeSpec = new PBEParameterSpec(salt,
             iterations, new IvParameterSpec(new byte[AES_BLOCK_SIZE]));
-    private static final String plainText = "This is a know plain text!";
+    private static final String plainText = "This is a known plain text!";
     private static final String sep = "======================================" +
             "===================================";
 
@@ -84,29 +83,61 @@ final class PBECipher2 extends PKCS11Test {
 
     private static Provider sunJCE = Security.getProvider("SunJCE");
 
-    // Generated with SunJCE
-    private static final Map<String, BigInteger> assertionData = Map.of(
-            "PBEWithHmacSHA1AndAES_128", new BigInteger("8eebe98a580fb09d026" +
-                    "dbfe60b3733b079e0de9ea7b0b1ccba011a1652d1e257", 16),
-            "PBEWithHmacSHA224AndAES_128", new BigInteger("1cbabdeb5d483af4a" +
-                    "841942f4b1095b7d6f60e46fabfd2609c015adc38cc227", 16),
-            "PBEWithHmacSHA256AndAES_128", new BigInteger("4d82f6591df3508d2" +
-                    "4531f06cdc4f90f4bdab7aeb07fbb57a3712e999d5b6f59", 16),
-            "PBEWithHmacSHA384AndAES_128", new BigInteger("3a0ed0959d51f40b9" +
-                    "ba9f506a5277f430521f2fbe1ba94bae368835f221b6cb9", 16),
-            "PBEWithHmacSHA512AndAES_128", new BigInteger("1388287a446009309" +
-                    "1418f4eca3ba1735b1fa025423d74ced36ce578d8ebf9da", 16),
-            "PBEWithHmacSHA1AndAES_256", new BigInteger("80f8208daab27ed02dd" +
-                    "8a354ef6f23ff7813c84dd1c8a1b081d6f4dee27182a2", 16),
-            "PBEWithHmacSHA224AndAES_256", new BigInteger("7e3b9ce20aec2e52f" +
-                    "f6c781602d4f79a55a88495b5217f1e22e1a068268e6247", 16),
-            "PBEWithHmacSHA256AndAES_256", new BigInteger("9d6a8b6a351dfd0dd" +
-                    "9e9f45924b2860dca7719c4c07e207a64ebc1acd16cc157", 16),
-            "PBEWithHmacSHA384AndAES_256", new BigInteger("6f1b386cee3a8e2d9" +
-                    "8c2e81828da0467dec8b989d22258efeab5932580d01d53", 16),
-            "PBEWithHmacSHA512AndAES_256", new BigInteger("30aaa346b2edd394f" +
-                    "50916187876ac32f1287b19d55c5eea6f7ef9b84aaf291e", 16)
-            );
+    private record AssertionData(String pbeCipherAlgo, String cipherAlgo,
+            BigInteger expectedCiphertext) {}
+
+    private static AssertionData cipherAssertionData(String pbeCipherAlgo,
+            String cipherAlgo, String staticExpectedCiphertext) {
+        BigInteger expectedCiphertext = null;
+        if (sunJCE != null) {
+            try {
+                expectedCiphertext = computeCipherText(sunJCE, pbeCipherAlgo,
+                        pbeCipherAlgo, Configuration.PBEParameterSpec);
+            } catch (GeneralSecurityException e) {
+                // Move to staticExpectedCiphertext as it's unlikely
+                // that any of the algorithms are available.
+                sunJCE = null;
+            }
+        }
+        if (expectedCiphertext == null) {
+            expectedCiphertext = new BigInteger(staticExpectedCiphertext, 16);
+        }
+        return new AssertionData(pbeCipherAlgo, cipherAlgo, expectedCiphertext);
+    }
+
+    // Generated with SunJCE.
+    private static final AssertionData[] assertionData = new AssertionData[]{
+            cipherAssertionData("PBEWithHmacSHA1AndAES_128",
+                    "AES/CBC/PKCS5Padding", "ba1c9614d550912925d99e0bc8969032" +
+                    "7ac6258b72117dcf750c19ee6ca73dd4"),
+            cipherAssertionData("PBEWithHmacSHA224AndAES_128",
+                    "AES/CBC/PKCS5Padding", "41960c43ca99cf2184511aaf2f0508a9" +
+                    "7da3762ee6c2b7e2027c8076811f2e52"),
+            cipherAssertionData("PBEWithHmacSHA256AndAES_128",
+                    "AES/CBC/PKCS5Padding", "6bb6a3dc3834e81e5ca6b5e70073ff46" +
+                    "903b188940a269ed26db2ffe622b8e16"),
+            cipherAssertionData("PBEWithHmacSHA384AndAES_128",
+                    "AES/CBC/PKCS5Padding", "22aabf7a6a059415dc4ca7d985f3de06" +
+                    "8f8300ca48d8de585d802670f4c1d9bd"),
+            cipherAssertionData("PBEWithHmacSHA512AndAES_128",
+                    "AES/CBC/PKCS5Padding", "b523e7c462a0b7fd74e492b3a6550464" +
+                    "ceebe81f08649ae163673afc242ad8a2"),
+            cipherAssertionData("PBEWithHmacSHA1AndAES_256",
+                    "AES/CBC/PKCS5Padding", "1e7c25e166afae069cec68ef9affca61" +
+                    "aea02ab1c3dc7471cb767ed7d6e37af0"),
+            cipherAssertionData("PBEWithHmacSHA224AndAES_256",
+                    "AES/CBC/PKCS5Padding", "6701f1cc75b6494ec4bd27158aa2c15d" +
+                    "7d10bc2f1fbb7d92d8277c7edfd1dd57"),
+            cipherAssertionData("PBEWithHmacSHA256AndAES_256",
+                    "AES/CBC/PKCS5Padding", "f82eb2fc016505baeb23ecdf85163933" +
+                    "5e8d6d48b48631185641febb75898a1d"),
+            cipherAssertionData("PBEWithHmacSHA384AndAES_256",
+                    "AES/CBC/PKCS5Padding", "ee9528022e58cdd9be80cd88443e03b3" +
+                    "de13376cf97c53d946d5c5dfc88097be"),
+            cipherAssertionData("PBEWithHmacSHA512AndAES_256",
+                    "AES/CBC/PKCS5Padding", "18f472912ffaa31824e20a5486324e14" +
+                    "0225e20cb158762e8647b1216fe0ab7e"),
+    };
 
     private static final class NoRandom extends SecureRandom {
         @Override
@@ -116,40 +147,37 @@ final class PBECipher2 extends PKCS11Test {
     public void main(Provider sunPKCS11) throws Exception {
         System.out.println("SunPKCS11: " + sunPKCS11.getName());
         for (Configuration conf : Configuration.values()) {
-            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_128", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_128", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_128", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_128", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_128", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_256", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_256", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_256", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_256", conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_256", conf);
+            for (AssertionData data : assertionData) {
+                testWith(sunPKCS11, data, true, conf);
+                if (conf != Configuration.PBEParameterSpec &&
+                        conf != Configuration.AlgorithmParameters) {
+                    testWith(sunPKCS11, data, false, conf);
+                }
+            }
         }
         System.out.println("TEST PASS - OK");
     }
 
-    private static void testWith(Provider sunPKCS11, String algorithm,
-            Configuration conf) throws Exception {
-        System.out.println(sep + System.lineSeparator() + algorithm
+    private static void testWith(Provider sunPKCS11, AssertionData data,
+            boolean testPBEService, Configuration conf) throws Exception {
+        String svcAlgo = testPBEService ? data.pbeCipherAlgo : data.cipherAlgo;
+        System.out.println(sep + System.lineSeparator() + svcAlgo
                 + " (with " + conf.name() + ")");
 
-        BigInteger cipherText = computeCipherText(sunPKCS11, algorithm, conf);
+        BigInteger cipherText = computeCipherText(sunPKCS11, svcAlgo,
+                data.pbeCipherAlgo, conf);
         printHex("Cipher Text", cipherText);
 
-        BigInteger expectedCipherText =
-                computeExpectedCipherText(algorithm, conf);
-
-        if (!cipherText.equals(expectedCipherText)) {
-            printHex("Expected Cipher Text", expectedCipherText);
+        if (!cipherText.equals(data.expectedCiphertext)) {
+            printHex("Expected Cipher Text", data.expectedCiphertext);
             throw new Exception("Expected Cipher Text did not match");
         }
     }
 
-    private static BigInteger computeCipherText(Provider p, String algorithm,
-            Configuration conf) throws GeneralSecurityException {
-        Cipher cipher = Cipher.getInstance(algorithm, p);
+    private static BigInteger computeCipherText(Provider p, String svcAlgo,
+            String keyAlgo, Configuration conf)
+            throws GeneralSecurityException {
+        Cipher cipher = Cipher.getInstance(svcAlgo, p);
         switch (conf) {
             case PBEParameterSpec, AlgorithmParameters -> {
                 SecretKey key = getPasswordOnlyPBEKey();
@@ -166,32 +194,17 @@ final class PBECipher2 extends PKCS11Test {
                 }
             }
             case SecretKeyFactoryDerivedKey -> {
-                SecretKey key = getDerivedSecretKey(p, algorithm);
+                SecretKey key = getDerivedSecretKey(p, keyAlgo);
                 cipher.init(Cipher.ENCRYPT_MODE, key,
                         pbeSpec.getParameterSpec());
             }
             case AnonymousPBEKey -> {
-                SecretKey key = getAnonymousPBEKey();
+                SecretKey key = getAnonymousPBEKey(keyAlgo,
+                        svcAlgo.equals(keyAlgo));
                 cipher.init(Cipher.ENCRYPT_MODE, key, new NoRandom());
             }
         }
         return new BigInteger(1, cipher.doFinal(plainText.getBytes()));
-    }
-
-    private static BigInteger computeExpectedCipherText(String algorithm,
-            Configuration conf) {
-        if (sunJCE != null) {
-            try {
-                return computeCipherText(sunJCE, algorithm, conf);
-            } catch (GeneralSecurityException e) {
-                // Move to assertionData as it's unlikely that any of
-                // the algorithms are available.
-                sunJCE = null;
-            }
-        }
-        // If SunJCE or the algorithm are not available, assertionData
-        // is used instead.
-        return assertionData.get(algorithm);
     }
 
     private static SecretKey getPasswordOnlyPBEKey()
@@ -206,18 +219,23 @@ final class PBECipher2 extends PKCS11Test {
                 .generateSecret(new PBEKeySpec(password, salt, iterations));
     }
 
-    private static SecretKey getAnonymousPBEKey() {
+    private static SecretKey getAnonymousPBEKey(String algorithm,
+            boolean isPbeCipherSvc) {
         return new PBEKey() {
             public byte[] getSalt() { return salt.clone(); }
             public int getIterationCount() { return iterations; }
-            public String getAlgorithm() { return "PBE"; }
+            public String getAlgorithm() { return algorithm; }
             public String getFormat() { return "RAW"; }
-            public char[] getPassword() { return null; } // unused in PBE Cipher
+            public char[] getPassword() { return password.clone(); }
             public byte[] getEncoded() {
-                byte[] passwdBytes = new byte[password.length];
-                for (int i = 0; i < password.length; i++)
-                    passwdBytes[i] = (byte) (password[i] & 0x7f);
-                return passwdBytes;
+                byte[] encodedKey = null;
+                if (isPbeCipherSvc) {
+                    encodedKey = new byte[password.length];
+                    for (int i = 0; i < password.length; i++) {
+                        encodedKey[i] = (byte) (password[i] & 0x7f);
+                    }
+                }
+                return encodedKey;
             }
         };
     }

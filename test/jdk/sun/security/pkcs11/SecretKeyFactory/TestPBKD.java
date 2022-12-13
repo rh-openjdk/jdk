@@ -29,8 +29,7 @@ import java.math.BigInteger;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
-import java.util.HashMap;
-import java.util.Map;
+import java.security.spec.InvalidKeySpecException;
 
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -55,9 +54,6 @@ public final class TestPBKD {
 }
 
 final class TestPBKD2 extends PKCS11Test {
-    private static final char[] password = "123456".toCharArray();
-    private static final byte[] salt = "abcdefgh".getBytes();
-    private static final int iterations = 1000;
     private static final String sep = "======================================" +
             "===================================";
 
@@ -74,252 +70,175 @@ final class TestPBKD2 extends PKCS11Test {
 
     private static Provider sunJCE = Security.getProvider("SunJCE");
 
-    // Generated with SunJCE
-    private static final Map<String, BigInteger> assertionData =
-            new HashMap<>() {{
-                put("HmacPBESHA1", new BigInteger("5f7d1c360d1703cede76f47db" +
-                        "2fa3facc62e7694", 16));
-                put("HmacPBESHA224", new BigInteger("289563f799b708f522ab2a3" +
-                        "8d283d0afa8fc1d3d227fcb9236c3a035", 16));
-                put("HmacPBESHA256", new BigInteger("888defcf4ef37eb0647014a" +
-                        "d172dd6fa3b3e9d024b962dba47608eea9b9c4b79", 16));
-                put("HmacPBESHA384", new BigInteger("f5464b34253fadab8838d0d" +
-                        "b11980c1787a99bf6f6304f2d8c942e30bada523494f9d5a0f3" +
-                        "741e411de21add8b5718a8", 16));
-                put("HmacPBESHA512", new BigInteger("18ae94337b132c68c611bc2" +
-                        "e723ac24dcd44a46d900dae2dd6170380d4c34f90fef7bdeb5f" +
-                        "6fddeb0d2230003e329b7a7eefcd35810d364ba95d31b68bb61" +
-                        "e52", 16));
-                put("PBEWithHmacSHA1AndAES_128", new BigInteger("fdb3dcc2e81" +
-                        "244d4d56bf7ec8dd61dd7", 16));
-                put("PBEWithHmacSHA224AndAES_128", new BigInteger("5ef9e5c6f" +
-                        "df7c355f3b424233a9f24c2", 16));
-                put("PBEWithHmacSHA256AndAES_128", new BigInteger("c5af597b0" +
-                        "1b4f6baac8f62ff6f22bfb1", 16));
-                put("PBEWithHmacSHA384AndAES_128", new BigInteger("c3208ebc5" +
-                        "d6db88858988ec00153847d", 16));
-                put("PBEWithHmacSHA512AndAES_128", new BigInteger("b27e8f7fb" +
-                        "6a4bd5ebea892cd9a7f5043", 16));
-                put("PBEWithHmacSHA1AndAES_256", new BigInteger("fdb3dcc2e81" +
-                        "244d4d56bf7ec8dd61dd78a1b6fb3ad11d9ebd7f62027a2ccde" +
-                        "98", 16));
-                put("PBEWithHmacSHA224AndAES_256", new BigInteger("5ef9e5c6f" +
-                        "df7c355f3b424233a9f24c2c9c41793cb0948b8ea3aac240b8d" +
-                        "f64d", 16));
-                put("PBEWithHmacSHA256AndAES_256", new BigInteger("c5af597b0" +
-                        "1b4f6baac8f62ff6f22bfb1f319c3278c8b31cc616294716d4e" +
-                        "ab08", 16));
-                put("PBEWithHmacSHA384AndAES_256", new BigInteger("c3208ebc5" +
-                        "d6db88858988ec00153847d5b1b7a8723640a022dc332bcaefe" +
-                        "b356", 16));
-                put("PBEWithHmacSHA512AndAES_256", new BigInteger("b27e8f7fb" +
-                        "6a4bd5ebea892cd9a7f5043cefff9c38b07e599721e8d116189" +
-                        "5482", 16));
-                put("PBKDF2WithHmacSHA1", new BigInteger("fdb3dcc2e81244d4d5" +
-                        "6bf7ec8dd61dd78a1b6fb3ad11d9ebd7f62027a2cc", 16));
-                put("PBKDF2WithHmacSHA224", new BigInteger("5ef9e5c6fdf7c355" +
-                        "f3b424233a9f24c2c9c41793cb0948b8ea3aac240b8df64d1a0" +
-                        "736ec1c69eef1c7b2", 16));
-                put("PBKDF2WithHmacSHA256", new BigInteger("c5af597b01b4f6ba" +
-                        "ac8f62ff6f22bfb1f319c3278c8b31cc616294716d4eab080b9" +
-                        "add9db34a42ceb2fea8d27adc00f4", 16));
-                put("PBKDF2WithHmacSHA384", new BigInteger("c3208ebc5d6db888" +
-                        "58988ec00153847d5b1b7a8723640a022dc332bcaefeb356995" +
-                        "d076a949d35c42c7e1e1ca936c12f8dc918e497edf279a522b7" +
-                        "c99580e2613846b3919af637da", 16));
-                put("PBKDF2WithHmacSHA512", new BigInteger("b27e8f7fb6a4bd5e" +
-                        "bea892cd9a7f5043cefff9c38b07e599721e8d1161895482da2" +
-                        "55746844cc1030be37ba1969df10ff59554d1ac5468fa9b7297" +
-                        "7bb7fd52103a0a7b488cdb8957616c3e23a16bca92120982180" +
-                        "c6c11a4f14649b50d0ade3a", 16));
-                }};
-
-    static interface AssertData {
-        BigInteger derive(String pbAlgo, PBEKeySpec keySpec) throws Exception;
+    private static BigInteger i(byte[] data) {
+        return new BigInteger(1, data);
     }
 
-    static final class P12PBKDAssertData implements AssertData {
-        private final int outLen;
-        private final String kdfAlgo;
-        private final int blockLen;
+    private record AssertionData(String algo, PBEKeySpec keySpec,
+            BigInteger expectedKey) {}
 
-        P12PBKDAssertData(int outLen, String kdfAlgo, int blockLen) {
-            this.outLen = outLen;
-            this.kdfAlgo = kdfAlgo;
-            this.blockLen = blockLen;
+    private static AssertionData p12PBKDAssertionData(String algo,
+            char[] password, int keyLen, String hashAlgo, int blockLen,
+            String staticExpectedKey) {
+        PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations, keyLen);
+        BigInteger expectedKey;
+        try {
+            // Since we need to access an internal
+            // SunJCE API, we use reflection.
+            Class<?> PKCS12PBECipherCore = Class.forName(
+                    "com.sun.crypto.provider.PKCS12PBECipherCore");
+
+            Field macKeyField =
+                    PKCS12PBECipherCore.getDeclaredField("MAC_KEY");
+            macKeyField.setAccessible(true);
+            int MAC_KEY = (int) macKeyField.get(null);
+
+            Method deriveMethod = PKCS12PBECipherCore.getDeclaredMethod(
+                    "derive", char[].class, byte[].class, int.class,
+                    int.class, int.class, String.class, int.class);
+            deriveMethod.setAccessible(true);
+            expectedKey = i((byte[]) deriveMethod.invoke(null,
+                    keySpec.getPassword(), keySpec.getSalt(),
+                    keySpec.getIterationCount(), keySpec.getKeyLength() / 8,
+                    MAC_KEY, hashAlgo, blockLen));
+        } catch (ReflectiveOperationException ignored) {
+            expectedKey = new BigInteger(staticExpectedKey, 16);
         }
+        return new AssertionData(algo, keySpec, expectedKey);
+    }
 
-        @Override
-        public BigInteger derive(String pbAlgo, PBEKeySpec keySpec) {
+    private static AssertionData pbkd2AssertionData(String algo,
+            char[] password, int keyLen, String kdfAlgo,
+            String staticExpectedKey) {
+        PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations, keyLen);
+        BigInteger expectedKey = null;
+        if (sunJCE != null) {
             try {
-                // Since we need to access an internal
-                // SunJCE API, we use reflection.
-                Class<?> PKCS12PBECipherCore = Class.forName(
-                        "com.sun.crypto.provider.PKCS12PBECipherCore");
-
-                Field macKeyField =
-                        PKCS12PBECipherCore.getDeclaredField("MAC_KEY");
-                macKeyField.setAccessible(true);
-                int MAC_KEY = (int) macKeyField.get(null);
-
-                Method deriveMethod = PKCS12PBECipherCore.getDeclaredMethod(
-                        "derive", char[].class, byte[].class, int.class,
-                        int.class, int.class, String.class, int.class);
-                deriveMethod.setAccessible(true);
-
-                return new BigInteger(1, (byte[]) deriveMethod.invoke(null,
-                        keySpec.getPassword(), keySpec.getSalt(),
-                        keySpec.getIterationCount(), this.outLen,
-                        MAC_KEY, this.kdfAlgo, this.blockLen));
-            } catch (ReflectiveOperationException ignored) {
-                return assertionData.get(pbAlgo);
+                expectedKey = i(SecretKeyFactory.getInstance(kdfAlgo, sunJCE)
+                        .generateSecret(keySpec).getEncoded());
+            } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+                // Move to staticExpectedKey as it's unlikely
+                // that any of the algorithms are available.
+                sunJCE = null;
             }
         }
+        if (expectedKey == null) {
+            expectedKey = new BigInteger(staticExpectedKey, 16);
+        }
+        return new AssertionData(algo, keySpec, expectedKey);
     }
 
-    static final class PBKD2AssertData implements AssertData {
-        private final String kdfAlgo;
-        private final int keyLen;
+    private static final char[] pwd = "123456".toCharArray();
+    private static final byte[] salt = "abcdefgh".getBytes();
+    private static final int iterations = 1000;
 
-        PBKD2AssertData(String kdfAlgo, int keyLen) {
-            // Key length is pinned by the algorithm name (not kdfAlgo,
-            // but the algorithm under test: PBEWithHmacSHA*AndAES_*)
-            this.kdfAlgo = kdfAlgo;
-            this.keyLen = keyLen;
-        }
-
-        PBKD2AssertData(String kdfAlgo) {
-            // Key length is variable for the algorithm under test
-            // (kdfAlgo is the algorithm under test: PBKDF2WithHmacSHA*)
-            this(kdfAlgo, -1);
-        }
-
-        @Override
-        public BigInteger derive(String pbAlgo, PBEKeySpec keySpec)
-                throws Exception {
-            if (this.keyLen != -1) {
-                keySpec = new PBEKeySpec(
-                        keySpec.getPassword(), keySpec.getSalt(),
-                        keySpec.getIterationCount(), this.keyLen);
-            }
-            if (sunJCE != null) {
-                try {
-                    return new BigInteger(1, SecretKeyFactory.getInstance(
-                            this.kdfAlgo, sunJCE).generateSecret(keySpec)
-                            .getEncoded());
-                } catch (NoSuchAlgorithmException e) {
-                    // Move to assertionData as it's unlikely that any of
-                    // the algorithms are available.
-                    sunJCE = null;
-                }
-            }
-            // If SunJCE or the algorithm are not available, assertionData
-            // is used instead.
-            return assertionData.get(pbAlgo);
-        }
-    }
+    private static final AssertionData[] assertionData = new AssertionData[]{
+            p12PBKDAssertionData("HmacPBESHA1", pwd, 160, "SHA-1", 64,
+                    "5f7d1c360d1703cede76f47db2fa3facc62e7694"),
+            p12PBKDAssertionData("HmacPBESHA224", pwd, 224, "SHA-224", 64,
+                    "289563f799b708f522ab2a38d283d0afa8fc1d3d227fcb9236c3a035"),
+            p12PBKDAssertionData("HmacPBESHA256", pwd, 256, "SHA-256", 64,
+                    "888defcf4ef37eb0647014ad172dd6fa3b3e9d024b962dba47608eea" +
+                    "9b9c4b79"),
+            p12PBKDAssertionData("HmacPBESHA384", pwd, 384, "SHA-384", 128,
+                    "f5464b34253fadab8838d0db11980c1787a99bf6f6304f2d8c942e30" +
+                    "bada523494f9d5a0f3741e411de21add8b5718a8"),
+            p12PBKDAssertionData("HmacPBESHA512", pwd, 512, "SHA-512", 128,
+                    "18ae94337b132c68c611bc2e723ac24dcd44a46d900dae2dd6170380" +
+                    "d4c34f90fef7bdeb5f6fddeb0d2230003e329b7a7eefcd35810d364b" +
+                    "a95d31b68bb61e52"),
+            pbkd2AssertionData("PBEWithHmacSHA1AndAES_128", pwd, 128,
+                    "PBKDF2WithHmacSHA1", "fdb3dcc2e81244d4d56bf7ec8dd61dd7"),
+            pbkd2AssertionData("PBEWithHmacSHA224AndAES_128", pwd, 128,
+                    "PBKDF2WithHmacSHA224", "5ef9e5c6fdf7c355f3b424233a9f24c2"),
+            pbkd2AssertionData("PBEWithHmacSHA256AndAES_128", pwd, 128,
+                    "PBKDF2WithHmacSHA256", "c5af597b01b4f6baac8f62ff6f22bfb1"),
+            pbkd2AssertionData("PBEWithHmacSHA384AndAES_128", pwd, 128,
+                    "PBKDF2WithHmacSHA384", "c3208ebc5d6db88858988ec00153847d"),
+            pbkd2AssertionData("PBEWithHmacSHA512AndAES_128", pwd, 128,
+                    "PBKDF2WithHmacSHA512", "b27e8f7fb6a4bd5ebea892cd9a7f5043"),
+            pbkd2AssertionData("PBEWithHmacSHA1AndAES_256", pwd, 256,
+                    "PBKDF2WithHmacSHA1", "fdb3dcc2e81244d4d56bf7ec8dd61dd78a" +
+                    "1b6fb3ad11d9ebd7f62027a2ccde98"),
+            pbkd2AssertionData("PBEWithHmacSHA224AndAES_256", pwd, 256,
+                    "PBKDF2WithHmacSHA224", "5ef9e5c6fdf7c355f3b424233a9f24c2" +
+                    "c9c41793cb0948b8ea3aac240b8df64d"),
+            pbkd2AssertionData("PBEWithHmacSHA256AndAES_256", pwd, 256,
+                    "PBKDF2WithHmacSHA256", "c5af597b01b4f6baac8f62ff6f22bfb1" +
+                    "f319c3278c8b31cc616294716d4eab08"),
+            pbkd2AssertionData("PBEWithHmacSHA384AndAES_256", pwd, 256,
+                    "PBKDF2WithHmacSHA384", "c3208ebc5d6db88858988ec00153847d" +
+                    "5b1b7a8723640a022dc332bcaefeb356"),
+            pbkd2AssertionData("PBEWithHmacSHA512AndAES_256", pwd, 256,
+                    "PBKDF2WithHmacSHA512", "b27e8f7fb6a4bd5ebea892cd9a7f5043" +
+                    "cefff9c38b07e599721e8d1161895482"),
+            pbkd2AssertionData("PBKDF2WithHmacSHA1", pwd, 240,
+                    "PBKDF2WithHmacSHA1", "fdb3dcc2e81244d4d56bf7ec8dd61dd78a" +
+                    "1b6fb3ad11d9ebd7f62027a2cc"),
+            pbkd2AssertionData("PBKDF2WithHmacSHA224", pwd, 336,
+                    "PBKDF2WithHmacSHA224", "5ef9e5c6fdf7c355f3b424233a9f24c2" +
+                    "c9c41793cb0948b8ea3aac240b8df64d1a0736ec1c69eef1c7b2"),
+            pbkd2AssertionData("PBKDF2WithHmacSHA256", pwd, 384,
+                    "PBKDF2WithHmacSHA256", "c5af597b01b4f6baac8f62ff6f22bfb1" +
+                    "f319c3278c8b31cc616294716d4eab080b9add9db34a42ceb2fea8d2" +
+                    "7adc00f4"),
+            pbkd2AssertionData("PBKDF2WithHmacSHA384", pwd, 576,
+                    "PBKDF2WithHmacSHA384", "c3208ebc5d6db88858988ec00153847d" +
+                    "5b1b7a8723640a022dc332bcaefeb356995d076a949d35c42c7e1e1c" +
+                    "a936c12f8dc918e497edf279a522b7c99580e2613846b3919af637da"),
+            pbkd2AssertionData("PBKDF2WithHmacSHA512", pwd, 768,
+                    "PBKDF2WithHmacSHA512", "b27e8f7fb6a4bd5ebea892cd9a7f5043" +
+                    "cefff9c38b07e599721e8d1161895482da255746844cc1030be37ba1" +
+                    "969df10ff59554d1ac5468fa9b72977bb7fd52103a0a7b488cdb8957" +
+                    "616c3e23a16bca92120982180c6c11a4f14649b50d0ade3a"),
+    };
 
     public void main(Provider sunPKCS11) throws Exception {
         System.out.println("SunPKCS11: " + sunPKCS11.getName());
+
+        // Test valid cases.
         for (Configuration conf : Configuration.values()) {
-            testWith(sunPKCS11, "HmacPBESHA1",
-                    new P12PBKDAssertData(20, "SHA-1", 64), conf);
-            testWith(sunPKCS11, "HmacPBESHA224",
-                    new P12PBKDAssertData(28, "SHA-224", 64), conf);
-            testWith(sunPKCS11, "HmacPBESHA256",
-                    new P12PBKDAssertData(32, "SHA-256", 64), conf);
-            testWith(sunPKCS11, "HmacPBESHA384",
-                    new P12PBKDAssertData(48, "SHA-384", 128), conf);
-            testWith(sunPKCS11, "HmacPBESHA512",
-                    new P12PBKDAssertData(64, "SHA-512", 128), conf);
-
-            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_128",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA1", 128), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_128",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA224", 128), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_128",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA256", 128), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_128",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA384", 128), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_128",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA512", 128), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA1AndAES_256",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA1", 256), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA224AndAES_256",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA224", 256), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA256AndAES_256",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA256", 256), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA384AndAES_256",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA384", 256), conf);
-            testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_256",
-                    new PBKD2AssertData("PBKDF2WithHmacSHA512", 256), conf);
-
-            testWith(sunPKCS11, "PBKDF2WithHmacSHA1", 240,
-                    new PBKD2AssertData("PBKDF2WithHmacSHA1"), conf);
-            testWith(sunPKCS11, "PBKDF2WithHmacSHA224", 336,
-                    new PBKD2AssertData("PBKDF2WithHmacSHA224"), conf);
-            testWith(sunPKCS11, "PBKDF2WithHmacSHA256", 384,
-                    new PBKD2AssertData("PBKDF2WithHmacSHA256"), conf);
-            testWith(sunPKCS11, "PBKDF2WithHmacSHA384", 576,
-                    new PBKD2AssertData("PBKDF2WithHmacSHA384"), conf);
-            testWith(sunPKCS11, "PBKDF2WithHmacSHA512", 768,
-                    new PBKD2AssertData("PBKDF2WithHmacSHA512"), conf);
+            for (AssertionData data : assertionData) {
+                testValidWith(sunPKCS11, data, conf);
+            }
         }
         System.out.println("TEST PASS - OK");
     }
 
-    private static void testWith(Provider sunPKCS11, String algorithm,
-            AssertData assertData, Configuration conf) throws Exception {
-        SecretKey key = getAnonymousPBEKey(algorithm);
-        PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations);
-        testWith(sunPKCS11, algorithm, key, keySpec, assertData, conf);
-    }
-
-    private static void testWith(Provider sunPKCS11, String algorithm,
-            int keyLen, AssertData assertData, Configuration conf)
-            throws Exception {
-        if (conf == Configuration.AnonymousPBEKey) {
-            // Skip, we can't specify the key length in this scenario, and
-            // we would get "Key length must be a non-zero positive integer"
-            return;
-        }
-        PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations, keyLen);
-        testWith(sunPKCS11, algorithm, null, keySpec, assertData, conf);
-    }
-
-    private static void testWith(Provider sunPKCS11, String algorithm,
-            SecretKey key, PBEKeySpec keySpec, AssertData assertData,
-            Configuration conf)
-            throws Exception {
-        System.out.println(sep + System.lineSeparator() + algorithm
+    private static void testValidWith(Provider sunPKCS11, AssertionData data,
+            Configuration conf) throws Exception {
+        System.out.println(sep + System.lineSeparator() + data.algo
                 + " (with " + conf.name() + ")");
 
-        SecretKeyFactory skFac = SecretKeyFactory.getInstance(
-                algorithm, sunPKCS11);
-
-        SecretKey derivedKeyObj = switch (conf) {
-            case PBEKeySpec -> skFac.generateSecret(keySpec);
-            case AnonymousPBEKey -> skFac.translateKey(key);
+        SecretKeyFactory skf = SecretKeyFactory.getInstance(data.algo,
+                sunPKCS11);
+        SecretKey derivedKey = switch (conf) {
+            case PBEKeySpec -> skf.generateSecret(data.keySpec);
+            case AnonymousPBEKey -> skf.translateKey(getAnonymousPBEKey(
+                    data.algo, data.keySpec));
         };
-        BigInteger derivedKey = new BigInteger(1, derivedKeyObj.getEncoded());
-        printHex("Derived Key", derivedKey);
+        BigInteger derivedKeyValue = i(derivedKey.getEncoded());
+        printHex("Derived Key", derivedKeyValue);
 
-        BigInteger expectedDerivedKey = assertData.derive(algorithm, keySpec);
-
-        if (!derivedKey.equals(expectedDerivedKey)) {
-            printHex("Expected Derived Key", expectedDerivedKey);
+        if (!derivedKeyValue.equals(data.expectedKey)) {
+            printHex("Expected Derived Key", data.expectedKey);
             throw new Exception("Expected Derived Key did not match");
         }
     }
 
-    private static SecretKey getAnonymousPBEKey(String algorithm) {
+    private static SecretKey getAnonymousPBEKey(String algorithm,
+            PBEKeySpec keySpec) {
         return new PBEKey() {
-            public byte[] getSalt() { return salt.clone(); }
-            public int getIterationCount() { return iterations; }
+            public byte[] getSalt() { return keySpec.getSalt(); }
+            public int getIterationCount() {
+                return keySpec.getIterationCount();
+            }
             public String getAlgorithm() { return algorithm; }
             public String getFormat() { return "RAW"; }
-            public char[] getPassword() { return password.clone(); }
-            public byte[] getEncoded() { return null; } // unused
+            public char[] getPassword() { return keySpec.getPassword(); }
+            public byte[] getEncoded() {
+                return new byte[keySpec.getKeyLength() / 8];
+            }
         };
     }
 
