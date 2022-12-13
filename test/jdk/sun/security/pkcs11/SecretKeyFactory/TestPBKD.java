@@ -30,11 +30,14 @@ import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.Security;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+import java.util.Arrays;
 
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.interfaces.PBEKey;
 import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /*
  * @test
@@ -129,9 +132,11 @@ final class TestPBKD2 extends PKCS11Test {
     }
 
     private static final char[] pwd = "123456".toCharArray();
+    private static final char[] emptyPwd = new char[0];
     private static final byte[] salt = "abcdefgh".getBytes();
     private static final int iterations = 1000;
 
+    // Generated with SunJCE.
     private static final AssertionData[] assertionData = new AssertionData[]{
             p12PBKDAssertionData("HmacPBESHA1", pwd, 160, "SHA-1", 64,
                     "5f7d1c360d1703cede76f47db2fa3facc62e7694"),
@@ -191,6 +196,13 @@ final class TestPBKD2 extends PKCS11Test {
                     "cefff9c38b07e599721e8d1161895482da255746844cc1030be37ba1" +
                     "969df10ff59554d1ac5468fa9b72977bb7fd52103a0a7b488cdb8957" +
                     "616c3e23a16bca92120982180c6c11a4f14649b50d0ade3a"),
+            p12PBKDAssertionData("HmacPBESHA512", emptyPwd, 512, "SHA-512",
+                    128, "90b6e088490c6c5e6b6e81209bd769d27df3868cae79591577a" +
+                    "c35b46e4c6ebcc4b90f4943e3cb165f9d1789d938235f4b35ba74df9" +
+                    "e509fbbb7aa329a432445"),
+            pbkd2AssertionData("PBEWithHmacSHA512AndAES_256", emptyPwd, 256,
+                    "PBKDF2WithHmacSHA512", "3a5c5fd11e4d381b32e11baa93d7b128" +
+                    "09e016e48e0542c5d3453fc240a0fa76"),
     };
 
     public void main(Provider sunPKCS11) throws Exception {
@@ -224,6 +236,17 @@ final class TestPBKD2 extends PKCS11Test {
             printHex("Expected Derived Key", data.expectedKey);
             throw new Exception("Expected Derived Key did not match");
         }
+
+        if (skf.translateKey(derivedKey) != derivedKey) {
+            throw new Exception("SecretKeyFactory::translateKey must return " +
+                    "the same key when a P11PBEKey from the same token is " +
+                    "passed");
+        }
+
+        testGetKeySpec(data, skf, derivedKey);
+        if (sunJCE != null && data.algo.startsWith("PBKDF2")) {
+            testTranslateP11PBEKeyToSunJCE(data.algo, (PBEKey) derivedKey);
+        }
     }
 
     private static SecretKey getAnonymousPBEKey(String algorithm,
@@ -245,6 +268,75 @@ final class TestPBKD2 extends PKCS11Test {
     private static void printHex(String title, BigInteger b) {
         String repr = (b == null) ? "buffer is null" : b.toString(16);
         System.out.println(title + ": " + repr + System.lineSeparator());
+    }
+
+    private static void testGetKeySpec(AssertionData data,
+            SecretKeyFactory skf, SecretKey derivedKey) throws Exception {
+        System.out.println(sep + System.lineSeparator()
+                + "SecretKeyFactory::getKeySpec() (for " + data.algo + ")");
+        KeySpec skfKeySpec = skf.getKeySpec(derivedKey, PBEKeySpec.class);
+        if (skfKeySpec instanceof PBEKeySpec skfPBEKeySpec) {
+            char[] specPassword = skfPBEKeySpec.getPassword();
+            byte[] specSalt = skfPBEKeySpec.getSalt();
+            int specIterations = skfPBEKeySpec.getIterationCount();
+            int specKeyLength = skfPBEKeySpec.getKeyLength();
+            System.out.println("  spec key length (bits): " + specKeyLength);
+            System.out.println("           spec password: "
+                    + String.valueOf(specPassword));
+            System.out.println("    spec iteration count: " + specIterations);
+            printHex("               spec salt", i(specSalt));
+
+            if (!Arrays.equals(specPassword, data.keySpec.getPassword())) {
+                throw new Exception("Password differs");
+            }
+            if (!Arrays.equals(specSalt, data.keySpec.getSalt())) {
+                throw new Exception("Salt differs");
+            }
+            if (specIterations != data.keySpec.getIterationCount()) {
+                throw new Exception("Iteration count differs");
+            }
+            if (specKeyLength != data.keySpec.getKeyLength()) {
+                throw new Exception("Key length differs");
+            }
+        } else {
+            throw new Exception("Invalid key spec type: " + skfKeySpec);
+        }
+
+        // Test extracting key bytes with a SecretKeySpec.
+        SecretKeySpec secretKeySpec = (SecretKeySpec)
+                skf.getKeySpec(derivedKey, SecretKeySpec.class);
+        if (!Arrays.equals(secretKeySpec.getEncoded(),
+                derivedKey.getEncoded())) {
+            throw new Exception("Unable to extract key bytes with a " +
+                    "SecretKeySpec");
+        }
+    }
+
+    private static void testTranslateP11PBEKeyToSunJCE(String algorithm,
+            PBEKey p11PbeK) throws Exception {
+        System.out.println(sep + System.lineSeparator()
+                + "Translate P11PBEKey to SunJCE (for " + algorithm + ")");
+        SecretKey jceK = SecretKeyFactory.getInstance(algorithm, sunJCE)
+                .translateKey(p11PbeK);
+        BigInteger jceEncoded = i(jceK.getEncoded());
+        printHex("    translated to SunJCE", jceEncoded);
+        if (jceK instanceof PBEKey jcePbeK) {
+            if (!Arrays.equals(jcePbeK.getPassword(), p11PbeK.getPassword())) {
+                throw new Exception("Password differs");
+            }
+            if (!Arrays.equals(jcePbeK.getSalt(), p11PbeK.getSalt())) {
+                throw new Exception("Salt differs");
+            }
+            if (jcePbeK.getIterationCount() != p11PbeK.getIterationCount()) {
+                throw new Exception("Iteration count differs");
+            }
+            if (!jceEncoded.equals(i(p11PbeK.getEncoded()))) {
+                throw new Exception("Encoded key differs");
+            }
+        } else {
+            throw new Exception("Unexpected key type for SunJCE key: "
+                    + jceK.getClass().getName());
+        }
     }
 
     public static void main(String[] args) throws Exception {
