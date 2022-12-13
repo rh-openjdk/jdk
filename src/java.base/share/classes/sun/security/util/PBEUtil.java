@@ -292,4 +292,26 @@ public final class PBEUtil {
             Arrays.fill(passwdChars, '\0');
         }
     }
+
+    public static AlgorithmParameterSpec checkKeyParams(Key key,
+            AlgorithmParameterSpec params, String algorithm)
+            throws InvalidKeyException, InvalidAlgorithmParameterException {
+        if (key instanceof javax.crypto.interfaces.PBEKey pbeKey) {
+            if (params instanceof PBEParameterSpec pbeParams) {
+                if (pbeParams.getIterationCount() !=
+                        pbeKey.getIterationCount() ||
+                        !Arrays.equals(pbeParams.getSalt(), pbeKey.getSalt())) {
+                    throw new InvalidAlgorithmParameterException(
+                            "Salt or iteration count parameters are " +
+                            "not consistent with PBE key");
+                }
+                return pbeParams.getParameterSpec();
+            }
+        } else {
+            throw new InvalidKeyException(
+                    "Cannot use a " + algorithm + " service with a key that " +
+                    "does not implement javax.crypto.interfaces.PBEKey");
+        }
+        return params;
+    }
 }

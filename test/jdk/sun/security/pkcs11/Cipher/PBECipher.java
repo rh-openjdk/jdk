@@ -169,8 +169,7 @@ final class PBECipher2 extends PKCS11Test {
             }
             case SunPKCS11SecretKeyFactoryDerivedKey -> {
                 SecretKey key = getDerivedSecretKey(p, algorithm);
-                pbeCipher.init(Cipher.ENCRYPT_MODE, key,
-                        p == sunJCE ? pbeSpec : ivSpec);
+                pbeCipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
             }
             case AnonymousPBEKey -> {
                 SecretKey key = getPasswordSaltIterationsPBEKey();

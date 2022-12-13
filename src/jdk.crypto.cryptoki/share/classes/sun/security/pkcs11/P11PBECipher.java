@@ -38,7 +38,6 @@ import javax.crypto.CipherSpi;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.ShortBufferException;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 
 import sun.security.jca.JCAUtil;
@@ -128,9 +127,11 @@ final class P11PBECipher extends CipherSpi {
             AlgorithmParameterSpec params, SecureRandom random)
                     throws InvalidKeyException,
                     InvalidAlgorithmParameterException {
-        if (!(key instanceof P11Key)) {
-            // Derive for compatibility with SunJCE's
-            // password-only com.sun.crypto.provider.PBEKey
+        if (key instanceof P11Key) {
+            params = PBEUtil.checkKeyParams(key, params, pbeAlg);
+        } else {
+            // The key is a plain password. Use SunPKCS11's PBE
+            // key derivation mechanism to obtain a P11Key.
             PBEKeySpec pbeSpec = pbes2Params.getPBEKeySpec(
                     blkSize, keyLen, opmode, key, params, random);
             try {
@@ -139,9 +140,6 @@ final class P11PBECipher extends CipherSpi {
                 throw new InvalidKeyException(e);
             }
             params = pbes2Params.getIvSpec();
-        } else if (!(params instanceof IvParameterSpec)) {
-            throw new InvalidAlgorithmParameterException(
-                    "Wrong parameter type: IV expected");
         }
         cipher.engineInit(opmode, key, params, random);
     }

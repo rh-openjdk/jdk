@@ -64,6 +64,9 @@ final class P11Mac extends MacSpi {
     // algorithm name
     private final String algorithm;
 
+    // whether the algorithm is a PBE one
+    private final boolean isPbeAlg;
+
     // mechanism object
     private final CK_MECHANISM ckMechanism;
 
@@ -87,6 +90,7 @@ final class P11Mac extends MacSpi {
         super();
         this.token = token;
         this.algorithm = algorithm;
+        this.isPbeAlg = algorithm.startsWith("HmacPBE");
         Long params = null;
         switch ((int)mechanism) {
         case (int)CKM_MD5_HMAC:
@@ -206,17 +210,22 @@ final class P11Mac extends MacSpi {
     protected void engineInit(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
         reset(true);
-        if (algorithm.startsWith("HmacPBE") && !(key instanceof P11Key)) {
-            // Derive for compatibility with SunJCE's
-            // password-only com.sun.crypto.provider.PBEKey
-            PBEKeySpec pbeSpec = PBEUtil.getPBAKeySpec(key, params);
-            try {
-                p11Key = P11SecretKeyFactory.derivePBEKey(
-                        token, pbeSpec, algorithm);
-            } catch (InvalidKeySpecException e) {
-                throw new InvalidKeyException(e);
+        if (isPbeAlg) {
+            if (key instanceof P11Key) {
+                params = PBEUtil.checkKeyParams(key, params, algorithm);
+            } else {
+                // The key is a plain password. Use SunPKCS11's PBE
+                // key derivation mechanism to obtain a P11Key.
+                PBEKeySpec pbeSpec = PBEUtil.getPBAKeySpec(key, params);
+                try {
+                    p11Key = P11SecretKeyFactory.derivePBEKey(
+                            token, pbeSpec, algorithm);
+                } catch (InvalidKeySpecException e) {
+                    throw new InvalidKeyException(e);
+                }
             }
-        } else {
+        }
+        if (!isPbeAlg || key instanceof P11Key) {
             if (params != null) {
                 throw new InvalidAlgorithmParameterException
                     ("Parameters not supported");
