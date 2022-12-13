@@ -24,6 +24,7 @@
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.ReflectiveOperationException;
 import java.math.BigInteger;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
@@ -39,7 +40,7 @@ import javax.crypto.spec.PBEKeySpec;
 /*
  * @test
  * @bug 9999999
- * @summary test key derivation on SunPKCS11's SecretKeyFactory service
+ * @summary test key derivation on a SunPKCS11 SecretKeyFactory service
  * @requires (jdk.version.major >= 8)
  * @library /test/lib ..
  * @modules java.base/com.sun.crypto.provider:open
@@ -57,15 +58,17 @@ final class TestPBKD2 extends PKCS11Test {
     private static final char[] password = "123456".toCharArray();
     private static final byte[] salt = "abcdefgh".getBytes();
     private static final int iterations = 1000;
-    private static final String sep =
-    "=========================================================================";
+    private static final String sep = "======================================" +
+            "===================================";
 
-    private static enum Configuration {
-        // Provide salt and iterations through a PBEKeySpec instance
+    private enum Configuration {
+        // Pass password, salt and iterations to a
+        // SecretKeyFactory through a PBEKeySpec.
         PBEKeySpec,
 
-        // Provide salt and iterations through an anonymous class implementing
-        // the javax.crypto.interfaces.PBEKey interface
+        // Pass password, salt and iterations and iterations to a
+        // SecretKeyFactory through an anonymous class implementing
+        // the javax.crypto.interfaces.PBEKey interface.
         AnonymousPBEKey,
     }
 
@@ -147,25 +150,30 @@ final class TestPBKD2 extends PKCS11Test {
         }
 
         @Override
-        public BigInteger derive(String pbAlgo, PBEKeySpec keySpec)
-                throws Exception {
-            // Since we need to access an internal SunJCE API, we use reflection
-            Class<?> PKCS12PBECipherCore = Class.forName(
-                    "com.sun.crypto.provider.PKCS12PBECipherCore");
+        public BigInteger derive(String pbAlgo, PBEKeySpec keySpec) {
+            try {
+                // Since we need to access an internal
+                // SunJCE API, we use reflection.
+                Class<?> PKCS12PBECipherCore = Class.forName(
+                        "com.sun.crypto.provider.PKCS12PBECipherCore");
 
-            Field macKeyField = PKCS12PBECipherCore.getDeclaredField("MAC_KEY");
-            macKeyField.setAccessible(true);
-            int MAC_KEY = (int) macKeyField.get(null);
+                Field macKeyField =
+                        PKCS12PBECipherCore.getDeclaredField("MAC_KEY");
+                macKeyField.setAccessible(true);
+                int MAC_KEY = (int) macKeyField.get(null);
 
-            Method deriveMethod = PKCS12PBECipherCore.getDeclaredMethod(
-                    "derive", char[].class, byte[].class, int.class,
-                    int.class, int.class, String.class, int.class);
-            deriveMethod.setAccessible(true);
+                Method deriveMethod = PKCS12PBECipherCore.getDeclaredMethod(
+                        "derive", char[].class, byte[].class, int.class,
+                        int.class, int.class, String.class, int.class);
+                deriveMethod.setAccessible(true);
 
-            return new BigInteger(1, (byte[]) deriveMethod.invoke(null,
-                    keySpec.getPassword(), keySpec.getSalt(),
-                    keySpec.getIterationCount(), this.outLen,
-                    MAC_KEY, this.kdfAlgo, this.blockLen));
+                return new BigInteger(1, (byte[]) deriveMethod.invoke(null,
+                        keySpec.getPassword(), keySpec.getSalt(),
+                        keySpec.getIterationCount(), this.outLen,
+                        MAC_KEY, this.kdfAlgo, this.blockLen));
+            } catch (ReflectiveOperationException ignored) {
+                return assertionData.get(pbAlgo);
+            }
         }
     }
 
@@ -246,7 +254,6 @@ final class TestPBKD2 extends PKCS11Test {
             testWith(sunPKCS11, "PBEWithHmacSHA512AndAES_256",
                     new PBKD2AssertData("PBKDF2WithHmacSHA512", 256), conf);
 
-            // Use 1,5 * digest size as the testing derived key length (in bits)
             testWith(sunPKCS11, "PBKDF2WithHmacSHA1", 240,
                     new PBKD2AssertData("PBKDF2WithHmacSHA1"), conf);
             testWith(sunPKCS11, "PBKDF2WithHmacSHA224", 336,
@@ -263,7 +270,7 @@ final class TestPBKD2 extends PKCS11Test {
 
     private static void testWith(Provider sunPKCS11, String algorithm,
             AssertData assertData, Configuration conf) throws Exception {
-        SecretKey key = getPasswordSaltIterationsPBEKey(algorithm);
+        SecretKey key = getAnonymousPBEKey(algorithm);
         PBEKeySpec keySpec = new PBEKeySpec(password, salt, iterations);
         testWith(sunPKCS11, algorithm, key, keySpec, assertData, conf);
     }
@@ -305,7 +312,7 @@ final class TestPBKD2 extends PKCS11Test {
         }
     }
 
-    private static SecretKey getPasswordSaltIterationsPBEKey(String algorithm) {
+    private static SecretKey getAnonymousPBEKey(String algorithm) {
         return new PBEKey() {
             public byte[] getSalt() { return salt.clone(); }
             public int getIterationCount() { return iterations; }

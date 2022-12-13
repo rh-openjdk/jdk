@@ -23,7 +23,7 @@
  */
 
 import java.math.BigInteger;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.Security;
 import java.util.Map;
@@ -56,19 +56,20 @@ final class PBAMac2 extends PKCS11Test {
     private static final byte[] salt = "abcdefgh".getBytes();
     private static final int iterations = 1000;
     private static final String plainText = "This is a know plain text!";
-    private static final String sep =
-    "=========================================================================";
+    private static final String sep = "======================================" +
+            "===================================";
 
-    private static enum Configuration {
-        // Provide salt and iterations through a PBEParameterSpec instance
+    private enum Configuration {
+        // Pass salt and iterations to a Mac through a PBEParameterSpec.
         PBEParameterSpec,
 
-        // Derive the key using SunPKCS11's SecretKeyFactory, providing salt
-        // & iterations through a PBEParameterSpec, then use the derived key
-        SunPKCS11SecretKeyFactoryDerivedKey,
+        // Derive a key using SunPKCS11's SecretKeyFactory (wrapping password,
+        // salt and iterations in a PBEKeySpec), and pass it to a Mac.
+        SecretKeyFactoryDerivedKey,
 
-        // Provide salt and iterations through an anonymous class implementing
-        // the javax.crypto.interfaces.PBEKey interface
+        // Pass password, salt and iterations and iterations to
+        // a Mac through an anonymous class implementing the
+        // javax.crypto.interfaces.PBEKey interface.
         AnonymousPBEKey,
     }
 
@@ -107,43 +108,43 @@ final class PBAMac2 extends PKCS11Test {
         System.out.println(sep + System.lineSeparator() + algorithm
                 + " (with " + conf.name() + ")");
 
-        BigInteger macResult = computeMac(sunPKCS11, algorithm, conf);
-        printHex("HMAC Result", macResult);
+        BigInteger mac = computeMac(sunPKCS11, algorithm, conf);
+        printHex("HMAC", mac);
 
-        BigInteger expectedMacResult = computeExpectedMac(algorithm, conf);
+        BigInteger expectedMac = computeExpectedMac(algorithm, conf);
 
-        if (!macResult.equals(expectedMacResult)) {
-            printHex("Expected HMAC Result", expectedMacResult);
-            throw new Exception("Expected HMAC Result did not match");
+        if (!mac.equals(expectedMac)) {
+            printHex("Expected HMAC", expectedMac);
+            throw new Exception("Expected HMAC did not match");
         }
     }
 
     private static BigInteger computeMac(Provider p, String algorithm,
-            Configuration conf) throws Exception {
-        Mac pbaMac = Mac.getInstance(algorithm, p);
+            Configuration conf) throws GeneralSecurityException {
+        Mac mac = Mac.getInstance(algorithm, p);
         switch (conf) {
             case PBEParameterSpec -> {
                 SecretKey key = getPasswordOnlyPBEKey();
-                pbaMac.init(key, new PBEParameterSpec(salt, iterations));
+                mac.init(key, new PBEParameterSpec(salt, iterations));
             }
-            case SunPKCS11SecretKeyFactoryDerivedKey -> {
+            case SecretKeyFactoryDerivedKey -> {
                 SecretKey key = getDerivedSecretKey(p, algorithm);
-                pbaMac.init(key);
+                mac.init(key);
             }
             case AnonymousPBEKey -> {
-                SecretKey key = getPasswordSaltIterationsPBEKey();
-                pbaMac.init(key);
+                SecretKey key = getAnonymousPBEKey();
+                mac.init(key);
             }
         }
-        return new BigInteger(1, pbaMac.doFinal(plainText.getBytes()));
+        return new BigInteger(1, mac.doFinal(plainText.getBytes()));
     }
 
-    private static BigInteger computeExpectedMac(
-            String algorithm, Configuration conf) throws Exception {
+    private static BigInteger computeExpectedMac(String algorithm,
+            Configuration conf) {
         if (sunJCE != null) {
             try {
                 return computeMac(sunJCE, algorithm, conf);
-            } catch (NoSuchAlgorithmException e) {
+            } catch (GeneralSecurityException e) {
                 // Move to assertionData as it's unlikely that any of
                 // the algorithms are available.
                 sunJCE = null;
@@ -154,25 +155,19 @@ final class PBAMac2 extends PKCS11Test {
         return assertionData.get(algorithm);
     }
 
-    private static SecretKey getPasswordOnlyPBEKey() throws Exception {
-        return getSecretKey(new PBEKeySpec(password),
-                SecretKeyFactory.getInstance("PBE"));
+    private static SecretKey getPasswordOnlyPBEKey()
+            throws GeneralSecurityException {
+        return SecretKeyFactory.getInstance("PBE")
+                .generateSecret(new PBEKeySpec(password));
     }
 
-    private static SecretKey getDerivedSecretKey(
-            Provider sunPKCS11, String algorithm) throws Exception {
-        return getSecretKey(new PBEKeySpec(password, salt, iterations),
-                SecretKeyFactory.getInstance(algorithm, sunPKCS11));
+    private static SecretKey getDerivedSecretKey(Provider sunPKCS11,
+            String algorithm) throws GeneralSecurityException {
+        return SecretKeyFactory.getInstance(algorithm, sunPKCS11)
+                .generateSecret(new PBEKeySpec(password, salt, iterations));
     }
 
-    private static SecretKey getSecretKey(
-            PBEKeySpec keySpec, SecretKeyFactory skFac) throws Exception {
-        SecretKey skey = skFac.generateSecret(keySpec);
-        keySpec.clearPassword();
-        return skey;
-    }
-
-    private static SecretKey getPasswordSaltIterationsPBEKey() {
+    private static SecretKey getAnonymousPBEKey() {
         return new PBEKey() {
             public byte[] getSalt() { return salt.clone(); }
             public int getIterationCount() { return iterations; }

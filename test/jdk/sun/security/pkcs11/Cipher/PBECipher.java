@@ -24,7 +24,7 @@
 
 import java.math.BigInteger;
 import java.security.AlgorithmParameters;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.Security;
@@ -58,27 +58,27 @@ final class PBECipher2 extends PKCS11Test {
     private static final char[] password = "123456".toCharArray();
     private static final byte[] salt = "abcdefgh".getBytes();
     private static final int iterations = 1000;
-    private static final IvParameterSpec ivSpec =
-            new IvParameterSpec(new byte[16]);
-    private static final PBEParameterSpec pbeSpec =
-            new PBEParameterSpec(salt, iterations, ivSpec);
+    private static final int AES_BLOCK_SIZE = 16;
+    private static final PBEParameterSpec pbeSpec = new PBEParameterSpec(salt,
+            iterations, new IvParameterSpec(new byte[AES_BLOCK_SIZE]));
     private static final String plainText = "This is a know plain text!";
-    private static final String sep =
-    "=========================================================================";
+    private static final String sep = "======================================" +
+            "===================================";
 
-    private static enum Configuration {
-        // Provide salt and iterations through a PBEParameterSpec instance
+    private enum Configuration {
+        // Pass salt and iterations to a Cipher through a PBEParameterSpec.
         PBEParameterSpec,
 
-        // Derive the key using SunPKCS11's SecretKeyFactory, providing salt
-        // & iterations through a PBEParameterSpec, then use the derived key
-        SunPKCS11SecretKeyFactoryDerivedKey,
+        // Derive a key using SunPKCS11's SecretKeyFactory (wrapping password,
+        // salt and iterations in a PBEKeySpec), and pass it to a Cipher.
+        SecretKeyFactoryDerivedKey,
 
-        // Provide salt and iterations through an AlgorithmParameters instance
+        // Pass salt and iterations to a Cipher through an AlgorithmParameters.
         AlgorithmParameters,
 
-        // Provide salt and iterations through an anonymous class implementing
-        // the javax.crypto.interfaces.PBEKey interface
+        // Pass password, salt and iterations and iterations to
+        // a Cipher through an anonymous class implementing the
+        // javax.crypto.interfaces.PBEKey interface.
         AnonymousPBEKey,
     }
 
@@ -110,9 +110,7 @@ final class PBECipher2 extends PKCS11Test {
 
     private static final class NoRandom extends SecureRandom {
         @Override
-        public void nextBytes(byte[] bytes) {
-            return;
-        }
+        public void nextBytes(byte[] bytes) {}
     }
 
     public void main(Provider sunPKCS11) throws Exception {
@@ -150,41 +148,42 @@ final class PBECipher2 extends PKCS11Test {
     }
 
     private static BigInteger computeCipherText(Provider p, String algorithm,
-            Configuration conf) throws Exception {
-        Cipher pbeCipher = Cipher.getInstance(algorithm, p);
+            Configuration conf) throws GeneralSecurityException {
+        Cipher cipher = Cipher.getInstance(algorithm, p);
         switch (conf) {
             case PBEParameterSpec, AlgorithmParameters -> {
                 SecretKey key = getPasswordOnlyPBEKey();
                 switch (conf) {
                     case PBEParameterSpec -> {
-                        pbeCipher.init(Cipher.ENCRYPT_MODE, key, pbeSpec);
+                        cipher.init(Cipher.ENCRYPT_MODE, key, pbeSpec);
                     }
                     case AlgorithmParameters -> {
                         AlgorithmParameters algoParams =
                                 AlgorithmParameters.getInstance("PBES2");
                         algoParams.init(pbeSpec);
-                        pbeCipher.init(Cipher.ENCRYPT_MODE, key, algoParams);
+                        cipher.init(Cipher.ENCRYPT_MODE, key, algoParams);
                     }
                 }
             }
-            case SunPKCS11SecretKeyFactoryDerivedKey -> {
+            case SecretKeyFactoryDerivedKey -> {
                 SecretKey key = getDerivedSecretKey(p, algorithm);
-                pbeCipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
+                cipher.init(Cipher.ENCRYPT_MODE, key,
+                        pbeSpec.getParameterSpec());
             }
             case AnonymousPBEKey -> {
-                SecretKey key = getPasswordSaltIterationsPBEKey();
-                pbeCipher.init(Cipher.ENCRYPT_MODE, key, new NoRandom());
+                SecretKey key = getAnonymousPBEKey();
+                cipher.init(Cipher.ENCRYPT_MODE, key, new NoRandom());
             }
         }
-        return new BigInteger(1, pbeCipher.doFinal(plainText.getBytes()));
+        return new BigInteger(1, cipher.doFinal(plainText.getBytes()));
     }
 
-    private static BigInteger computeExpectedCipherText(
-            String algorithm, Configuration conf) throws Exception {
+    private static BigInteger computeExpectedCipherText(String algorithm,
+            Configuration conf) {
         if (sunJCE != null) {
             try {
                 return computeCipherText(sunJCE, algorithm, conf);
-            } catch (NoSuchAlgorithmException e) {
+            } catch (GeneralSecurityException e) {
                 // Move to assertionData as it's unlikely that any of
                 // the algorithms are available.
                 sunJCE = null;
@@ -195,25 +194,19 @@ final class PBECipher2 extends PKCS11Test {
         return assertionData.get(algorithm);
     }
 
-    private static SecretKey getPasswordOnlyPBEKey() throws Exception {
-        return getSecretKey(new PBEKeySpec(password),
-                SecretKeyFactory.getInstance("PBE"));
+    private static SecretKey getPasswordOnlyPBEKey()
+            throws GeneralSecurityException {
+        return SecretKeyFactory.getInstance("PBE")
+                .generateSecret(new PBEKeySpec(password));
     }
 
-    private static SecretKey getDerivedSecretKey(
-            Provider sunPKCS11, String algorithm) throws Exception {
-        return getSecretKey(new PBEKeySpec(password, salt, iterations),
-                SecretKeyFactory.getInstance(algorithm, sunPKCS11));
+    private static SecretKey getDerivedSecretKey(Provider sunPKCS11,
+            String algorithm) throws GeneralSecurityException {
+        return SecretKeyFactory.getInstance(algorithm, sunPKCS11)
+                .generateSecret(new PBEKeySpec(password, salt, iterations));
     }
 
-    private static SecretKey getSecretKey(
-            PBEKeySpec keySpec, SecretKeyFactory skFac) throws Exception {
-        SecretKey skey = skFac.generateSecret(keySpec);
-        keySpec.clearPassword();
-        return skey;
-    }
-
-    private static SecretKey getPasswordSaltIterationsPBEKey() {
+    private static SecretKey getAnonymousPBEKey() {
         return new PBEKey() {
             public byte[] getSalt() { return salt.clone(); }
             public int getIterationCount() { return iterations; }

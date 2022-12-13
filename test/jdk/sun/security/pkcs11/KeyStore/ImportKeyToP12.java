@@ -69,8 +69,8 @@ final class ImportKeyToP122 extends PKCS11Test {
             "HmacPBESHA384", "HmacPBESHA512"
     };
     private static final KeyStore p12;
-    private static final String sep =
-    "=========================================================================";
+    private static final String sep = "======================================" +
+            "===================================";
 
     static {
         KeyStore tP12 = null;
@@ -128,7 +128,8 @@ final class ImportKeyToP122 extends PKCS11Test {
         if (!MessageDigest.isEqual(key.getEncoded(), k.getEncoded())) {
             throw new Exception("Keys differ. Consistency check failed.");
         }
-        System.out.println("Secret key import successful" + System.lineSeparator() + sep);
+        System.out.println("Secret key import successful"
+                + System.lineSeparator() + sep);
     }
 
     public static void main(String[] args) throws Exception {
