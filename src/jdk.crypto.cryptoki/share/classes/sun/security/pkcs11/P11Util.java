@@ -27,11 +27,6 @@ package sun.security.pkcs11;
 
 import java.math.BigInteger;
 import java.security.*;
-import java.util.HashMap;
-import java.util.Map;
-import sun.security.pkcs11.wrapper.CK_ATTRIBUTE;
-
-import static sun.security.pkcs11.wrapper.PKCS11Constants.*;
 
 /**
  * Collection of static utility methods.
@@ -44,93 +39,6 @@ public final class P11Util {
     private static Object LOCK = new Object();
 
     private static volatile Provider sun, sunRsaSign, sunJce;
-
-    // Used by PBE
-    static final class KDFData {
-        public final long kdfMech;
-        public final long prfMech;
-        public final String keyAlgo;
-        public final int keyLen;
-        public final CK_ATTRIBUTE encrypt_or_sign_true;
-
-        KDFData(long kdfMech, long prfMech, String keyAlgo,
-                int keyLen, CK_ATTRIBUTE encrypt_or_sign_true) {
-            this.kdfMech = kdfMech;
-            this.prfMech = prfMech;
-            this.keyAlgo = keyAlgo;
-            this.keyLen = keyLen;
-            this.encrypt_or_sign_true = encrypt_or_sign_true;
-        }
-
-        public static void addPbkdf2Data(String algo, long kdfMech,
-                                         long prfMech) {
-            kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    algo, -1, CK_ATTRIBUTE.SIGN_TRUE));
-        }
-
-        public static void addPbkdf2AesData(String algo, long kdfMech,
-                                            long prfMech, int keyLen) {
-            kdfDataMap.put(algo, new KDFData(kdfMech, prfMech,
-                    "AES", keyLen, CK_ATTRIBUTE.ENCRYPT_TRUE));
-        }
-
-        public static void addPkcs12KDMacData(String algo, long kdfMech,
-                                              int keyLen) {
-            kdfDataMap.put(algo, new KDFData(kdfMech, -1,
-                    "HMAC", keyLen, CK_ATTRIBUTE.SIGN_TRUE));
-        }
-    }
-
-    static final Map<String, KDFData> kdfDataMap = new HashMap<>();
-
-    static {
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA1AndAES_128",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA1, 128);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA224AndAES_128",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA224, 128);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA256AndAES_128",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA256, 128);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA384AndAES_128",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA384, 128);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA512AndAES_128",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA512, 128);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA1AndAES_256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA1, 256);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA224AndAES_256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA224, 256);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA256AndAES_256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA256, 256);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA384AndAES_256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA384, 256);
-        KDFData.addPbkdf2AesData("PBEWithHmacSHA512AndAES_256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA512, 256);
-
-        KDFData.addPbkdf2Data("PBKDF2WithHmacSHA1",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA1);
-        KDFData.addPbkdf2Data("PBKDF2WithHmacSHA224",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA224);
-        KDFData.addPbkdf2Data("PBKDF2WithHmacSHA256",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA256);
-        KDFData.addPbkdf2Data("PBKDF2WithHmacSHA384",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA384);
-        KDFData.addPbkdf2Data("PBKDF2WithHmacSHA512",
-                CKM_PKCS5_PBKD2, CKP_PKCS5_PBKD2_HMAC_SHA512);
-
-        KDFData.addPkcs12KDMacData("HmacPBESHA1",
-                CKM_PBA_SHA1_WITH_SHA1_HMAC, 160);
-        KDFData.addPkcs12KDMacData("HmacPBESHA224",
-                CKM_NSS_PKCS12_PBE_SHA224_HMAC_KEY_GEN, 224);
-        KDFData.addPkcs12KDMacData("HmacPBESHA256",
-                CKM_NSS_PKCS12_PBE_SHA256_HMAC_KEY_GEN, 256);
-        KDFData.addPkcs12KDMacData("HmacPBESHA384",
-                CKM_NSS_PKCS12_PBE_SHA384_HMAC_KEY_GEN, 384);
-        KDFData.addPkcs12KDMacData("HmacPBESHA512",
-                CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
-        KDFData.addPkcs12KDMacData("HmacPBESHA512/224",
-                CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
-        KDFData.addPkcs12KDMacData("HmacPBESHA512/256",
-                CKM_NSS_PKCS12_PBE_SHA512_HMAC_KEY_GEN, 512);
-    }
 
     private P11Util() {
         // empty

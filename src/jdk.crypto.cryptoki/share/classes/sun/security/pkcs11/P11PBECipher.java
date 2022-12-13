@@ -50,7 +50,7 @@ final class P11PBECipher extends CipherSpi {
     private final String pbeAlg;
     private final P11Cipher cipher;
     private final int blkSize;
-    private final int keyLen;
+    private final P11SecretKeyFactory.PBEKeyInfo svcPbeKi;
     private final PBEUtil.PBES2Params pbes2Params = new PBEUtil.PBES2Params();
 
     P11PBECipher(Token token, String pbeAlg, long cipherMech)
@@ -65,9 +65,9 @@ final class P11PBECipher extends CipherSpi {
         }
         cipher = new P11Cipher(token, cipherTrans, cipherMech);
         blkSize = cipher.engineGetBlockSize();
-        assert P11Util.kdfDataMap.get(pbeAlg) != null;
-        keyLen = P11Util.kdfDataMap.get(pbeAlg).keyLen;
         this.pbeAlg = pbeAlg;
+        svcPbeKi = P11SecretKeyFactory.getPBEKeyInfo(pbeAlg);
+        assert svcPbeKi != null : "algorithm must be in KeyInfo map";
         this.token = token;
     }
 
@@ -133,9 +133,10 @@ final class P11PBECipher extends CipherSpi {
             // The key is a plain password. Use SunPKCS11's PBE
             // key derivation mechanism to obtain a P11Key.
             PBEKeySpec pbeSpec = pbes2Params.getPBEKeySpec(
-                    blkSize, keyLen, opmode, key, params, random);
+                    blkSize, svcPbeKi.keyLen, opmode, key, params, random);
             try {
-                key = P11SecretKeyFactory.derivePBEKey(token, pbeSpec, pbeAlg);
+                key = P11SecretKeyFactory.derivePBEKey(
+                        token, pbeSpec, svcPbeKi);
             } catch (InvalidKeySpecException e) {
                 throw new InvalidKeyException(e);
             }

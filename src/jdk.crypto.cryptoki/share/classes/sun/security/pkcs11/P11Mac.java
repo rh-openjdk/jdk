@@ -64,6 +64,9 @@ final class P11Mac extends MacSpi {
     // algorithm name
     private final String algorithm;
 
+    // PBEKeyInfo if algorithm is PBE
+    private final P11SecretKeyFactory.PBEKeyInfo svcPbeKi;
+
     // whether the algorithm is a PBE one
     private final boolean isPbeAlg;
 
@@ -90,7 +93,8 @@ final class P11Mac extends MacSpi {
         super();
         this.token = token;
         this.algorithm = algorithm;
-        this.isPbeAlg = algorithm.startsWith("HmacPBE");
+        this.svcPbeKi = P11SecretKeyFactory.getPBEKeyInfo(algorithm);
+        this.isPbeAlg = this.svcPbeKi != null;
         Long params = null;
         switch ((int)mechanism) {
         case (int)CKM_MD5_HMAC:
@@ -219,7 +223,7 @@ final class P11Mac extends MacSpi {
                 PBEKeySpec pbeSpec = PBEUtil.getPBAKeySpec(key, params);
                 try {
                     p11Key = P11SecretKeyFactory.derivePBEKey(
-                            token, pbeSpec, algorithm);
+                            token, pbeSpec, svcPbeKi);
                 } catch (InvalidKeySpecException e) {
                     throw new InvalidKeyException(e);
                 }
