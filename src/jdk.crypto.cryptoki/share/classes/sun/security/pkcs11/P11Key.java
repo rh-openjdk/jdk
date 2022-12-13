@@ -519,8 +519,9 @@ abstract class P11Key implements Key, Length {
         }
     }
 
-    private static class P11PBEKey extends P11SecretKey implements PBEKey {
-        private static final long serialVersionUID = -7828241727014329084L;
+    private static final class P11PBEKey extends P11SecretKey
+            implements PBEKey {
+        private static final long serialVersionUID = 6847576994253634876L;
         private final char[] password;
         private final byte[] salt;
         private final int iterationCount;
@@ -535,12 +536,12 @@ abstract class P11Key implements Key, Length {
 
         @Override
         public char[] getPassword() {
-            return password;
+            return password.clone();
         }
 
         @Override
         public byte[] getSalt() {
-            return salt;
+            return salt.clone();
         }
 
         @Override

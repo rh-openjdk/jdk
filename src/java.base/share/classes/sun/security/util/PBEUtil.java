@@ -44,30 +44,26 @@ import javax.crypto.spec.PBEParameterSpec;
 public final class PBEUtil {
 
     // Used by SunJCE and SunPKCS11
-    public final static class PBES2Helper {
+    public final static class PBES2Params {
+        private static final int DEFAULT_SALT_LENGTH = 20;
+        private static final int DEFAULT_ITERATIONS = 4096;
+
         private int iCount;
         private byte[] salt;
         private IvParameterSpec ivSpec;
-        private final int defaultSaltLength;
-        private final int defaultCount;
-
-        public PBES2Helper(int defaultSaltLength, int defaultCount) {
-            this.defaultSaltLength = defaultSaltLength;
-            this.defaultCount = defaultCount;
-        }
 
         public IvParameterSpec getIvSpec() {
             return ivSpec;
         }
 
-        public AlgorithmParameters getAlgorithmParameters(
-                int blkSize, String pbeAlgo, Provider p, SecureRandom random) {
+        public AlgorithmParameters getAlgorithmParameters(int blkSize,
+                String pbeAlgo, Provider p, SecureRandom random) {
             AlgorithmParameters params = null;
             if (salt == null) {
                 // generate random salt and use default iteration count
-                salt = new byte[defaultSaltLength];
+                salt = new byte[DEFAULT_SALT_LENGTH];
                 random.nextBytes(salt);
-                iCount = defaultCount;
+                iCount = DEFAULT_ITERATIONS;
             }
             if (ivSpec == null) {
                 // generate random IV
@@ -93,11 +89,9 @@ public final class PBEUtil {
             return params;
         }
 
-        public PBEKeySpec getPBEKeySpec(
-                int blkSize, int keyLength, int opmode, Key key,
-                AlgorithmParameterSpec params, SecureRandom random)
-            throws InvalidKeyException, InvalidAlgorithmParameterException {
-
+        public PBEKeySpec getPBEKeySpec(int blkSize, int keyLength, int opmode,
+                Key key, AlgorithmParameterSpec params, SecureRandom random)
+                throws InvalidKeyException, InvalidAlgorithmParameterException {
             if (key == null) {
                 throw new InvalidKeyException("Null key");
             }
@@ -123,7 +117,7 @@ public final class PBEUtil {
                     iCount = ((javax.crypto.interfaces.PBEKey)key)
                             .getIterationCount();
                     if (iCount == 0) {
-                        iCount = defaultCount;
+                        iCount = DEFAULT_ITERATIONS;
                     } else if (iCount < 0) {
                         throw new InvalidAlgorithmParameterException(
                                 "Iteration count must be a positive number");
@@ -135,9 +129,9 @@ public final class PBEUtil {
                 if (params == null) {
                     if (salt == null) {
                         // generate random salt and use default iteration count
-                        salt = new byte[defaultSaltLength];
+                        salt = new byte[DEFAULT_SALT_LENGTH];
                         random.nextBytes(salt);
-                        iCount = defaultCount;
+                        iCount = DEFAULT_ITERATIONS;
                     }
                     if ((opmode == Cipher.ENCRYPT_MODE) ||
                             (opmode == Cipher.WRAP_MODE)) {
@@ -148,8 +142,8 @@ public final class PBEUtil {
                     }
                 } else {
                     if (!(params instanceof PBEParameterSpec)) {
-                        throw new InvalidAlgorithmParameterException
-                                ("Wrong parameter type: PBE expected");
+                        throw new InvalidAlgorithmParameterException(
+                                "Wrong parameter type: PBE expected");
                     }
                     // salt and iteration count from the params take precedence
                     byte[] specSalt = ((PBEParameterSpec) params).getSalt();
@@ -161,7 +155,7 @@ public final class PBEUtil {
                     int specICount = ((PBEParameterSpec) params)
                             .getIterationCount();
                     if (specICount == 0) {
-                        specICount = defaultCount;
+                        specICount = DEFAULT_ITERATIONS;
                     } else if (specICount < 0) {
                         throw new InvalidAlgorithmParameterException(
                                 "Iteration count must be a positive number");
@@ -220,7 +214,8 @@ public final class PBEUtil {
     }
 
     // Used by SunJCE and SunPKCS11
-    public static PBEKeySpec getPBAKeySpec(Key key, AlgorithmParameterSpec params)
+    public static PBEKeySpec getPBAKeySpec(Key key,
+            AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
         char[] passwdChars;
         byte[] salt = null;
@@ -252,27 +247,30 @@ public final class PBEUtil {
                 // javax.crypto.Mac api does not have any method for caller to
                 // retrieve the generated defaults.
                 if ((salt == null) || (iCount == 0)) {
-                    throw new InvalidAlgorithmParameterException
-                            ("PBEParameterSpec required for salt and iteration count");
+                    throw new InvalidAlgorithmParameterException(
+                            "PBEParameterSpec required for salt " +
+                            "and iteration count");
                 }
             } else if (!(params instanceof PBEParameterSpec)) {
-                throw new InvalidAlgorithmParameterException
-                        ("PBEParameterSpec type required");
+                throw new InvalidAlgorithmParameterException(
+                        "PBEParameterSpec type required");
             } else {
                 PBEParameterSpec pbeParams = (PBEParameterSpec) params;
                 // make sure the parameter values are consistent
                 if (salt != null) {
                     if (!Arrays.equals(salt, pbeParams.getSalt())) {
-                        throw new InvalidAlgorithmParameterException
-                                ("Inconsistent value of salt between key and params");
+                        throw new InvalidAlgorithmParameterException(
+                                "Inconsistent value of salt " +
+                                "between key and params");
                     }
                 } else {
                     salt = pbeParams.getSalt();
                 }
                 if (iCount != 0) {
                     if (iCount != pbeParams.getIterationCount()) {
-                        throw new InvalidAlgorithmParameterException
-                                ("Different iteration count between key and params");
+                        throw new InvalidAlgorithmParameterException(
+                                "Different iteration count " +
+                                "between key and params");
                     }
                 } else {
                     iCount = pbeParams.getIterationCount();
@@ -282,12 +280,12 @@ public final class PBEUtil {
             // for salt; just require the minimum salt length to be 8-byte
             // which is what PKCS#5 recommends and openssl does.
             if (salt.length < 8) {
-                throw new InvalidAlgorithmParameterException
-                        ("Salt must be at least 8 bytes long");
+                throw new InvalidAlgorithmParameterException(
+                        "Salt must be at least 8 bytes long");
             }
             if (iCount <= 0) {
-                throw new InvalidAlgorithmParameterException
-                        ("IterationCount must be a positive number");
+                throw new InvalidAlgorithmParameterException(
+                        "IterationCount must be a positive number");
             }
             return new PBEKeySpec(passwdChars, salt, iCount);
         } finally {

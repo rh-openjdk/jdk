@@ -205,11 +205,11 @@ final class P11Mac extends MacSpi {
     // see JCE spec
     protected void engineInit(Key key, AlgorithmParameterSpec params)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
+        reset(true);
         if (algorithm.startsWith("HmacPBE") && !(key instanceof P11Key)) {
             // Derive for compatibility with SunJCE's
             // password-only com.sun.crypto.provider.PBEKey
             PBEKeySpec pbeSpec = PBEUtil.getPBAKeySpec(key, params);
-            reset(true);
             try {
                 p11Key = P11SecretKeyFactory.derivePBEKey(
                         token, pbeSpec, algorithm);
@@ -221,7 +221,6 @@ final class P11Mac extends MacSpi {
                 throw new InvalidAlgorithmParameterException
                     ("Parameters not supported");
             }
-            reset(true);
             p11Key = P11SecretKeyFactory.convertKey(token, key, algorithm);
         }
         try {

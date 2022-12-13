@@ -44,10 +44,6 @@ import sun.security.util.PBEUtil;
  * @see javax.crypto.Cipher
  */
 abstract class PBES2Core extends CipherSpi {
-
-    private static final int DEFAULT_SALT_LENGTH = 20;
-    private static final int DEFAULT_COUNT = 4096;
-
     // the encapsulated cipher
     private final CipherCore cipher;
     private final int keyLength; // in bits
@@ -55,8 +51,7 @@ abstract class PBES2Core extends CipherSpi {
     private final PBKDF2Core kdf;
     private final String pbeAlgo;
     private final String cipherAlgo;
-    private final PBEUtil.PBES2Helper pbes2Helper = new PBEUtil.PBES2Helper(
-            DEFAULT_SALT_LENGTH, DEFAULT_COUNT);
+    private final PBEUtil.PBES2Params pbes2Params = new PBEUtil.PBES2Params();
 
     /**
      * Creates an instance of PBE Scheme 2 according to the selected
@@ -129,7 +124,7 @@ abstract class PBES2Core extends CipherSpi {
     }
 
     protected AlgorithmParameters engineGetParameters() {
-        return pbes2Helper.getAlgorithmParameters(
+        return pbes2Params.getAlgorithmParameters(
                 blkSize, pbeAlgo, SunJCE.getInstance(), SunJCE.getRandom());
     }
 
@@ -150,7 +145,7 @@ abstract class PBES2Core extends CipherSpi {
                               SecureRandom random)
         throws InvalidKeyException, InvalidAlgorithmParameterException {
 
-        PBEKeySpec pbeSpec = pbes2Helper.getPBEKeySpec(blkSize, keyLength,
+        PBEKeySpec pbeSpec = pbes2Params.getPBEKeySpec(blkSize, keyLength,
                 opmode, key, params, random);
 
         PBKDF2KeyImpl s;
@@ -170,13 +165,13 @@ abstract class PBES2Core extends CipherSpi {
         SecretKeySpec cipherKey = new SecretKeySpec(derivedKey, cipherAlgo);
 
         // initialize the underlying cipher
-        cipher.init(opmode, cipherKey, pbes2Helper.getIvSpec(), random);
+        cipher.init(opmode, cipherKey, pbes2Params.getIvSpec(), random);
     }
 
     protected void engineInit(int opmode, Key key, AlgorithmParameters params,
                               SecureRandom random)
         throws InvalidKeyException, InvalidAlgorithmParameterException {
-        engineInit(opmode, key, PBEUtil.PBES2Helper.getParameterSpec(params),
+        engineInit(opmode, key, PBEUtil.PBES2Params.getParameterSpec(params),
                 random);
     }
 
