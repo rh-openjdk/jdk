@@ -42,6 +42,8 @@ import java.util.List;
 import javax.crypto.Mac;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class MacSameTest extends PKCS11Test {
@@ -75,9 +77,18 @@ public class MacSameTest extends PKCS11Test {
             // first try w/ java secret key object
             byte[] keyVal = new byte[KEY_SIZE];
             srdm.nextBytes(keyVal);
-            SecretKey skey = new SecretKeySpec(keyVal, alg);
-
+            SecretKey skey;
             try {
+                if (alg.startsWith("HmacPBE")) {
+                    char[] pwd = new char[keyVal.length];
+                    for (int i = 0; i < keyVal.length; i++) {
+                        pwd[i] = (char) keyVal[i];
+                    }
+                    skey = SecretKeyFactory.getInstance(alg, p).generateSecret(
+                            new PBEKeySpec(pwd, keyVal, 1000));
+                } else {
+                    skey = new SecretKeySpec(keyVal, alg);
+                }
                 doTest(alg, skey, p);
             } catch (Exception e) {
                 System.out.println("Unexpected exception: " + e);

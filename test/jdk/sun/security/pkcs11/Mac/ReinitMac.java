@@ -37,6 +37,9 @@ import java.security.Provider;
 import java.util.Random;
 import java.util.List;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class ReinitMac extends PKCS11Test {
@@ -75,7 +78,17 @@ public class ReinitMac extends PKCS11Test {
     private void doTest(String alg, Provider p, byte[] keyVal, byte[] data)
             throws Exception {
         System.out.println("Testing " + alg);
-        SecretKeySpec key = new SecretKeySpec(keyVal, alg);
+        SecretKey key;
+        if (alg.startsWith("HmacPBE")) {
+            char[] pwd = new char[keyVal.length];
+            for (int i = 0; i < keyVal.length; i++) {
+                pwd[i] = (char) keyVal[i];
+            }
+            key = SecretKeyFactory.getInstance(alg, p).generateSecret(
+                    new PBEKeySpec(pwd, keyVal, 1000));
+        } else {
+            key = new SecretKeySpec(keyVal, alg);
+        }
         Mac mac = Mac.getInstance(alg, p);
         mac.init(key);
         mac.init(key);
