@@ -88,6 +88,7 @@ fips.provider.3=SunEC
 fips.provider.4=SunJSSE
 fips.provider.5=SunJCE
 fips.provider.6=SunRsaSign
+fips.provider.7=XMLDSig
 
 #
 # A list of preferred providers for specific algorithms. These providers will
