@@ -160,10 +160,21 @@ public final class SunPKCS11 extends AuthProvider {
                          * fips.nssdb.path System property after expansion.
                          * Security properties expansion is unsupported.
                          */
-                        System.setProperty(
-                                FIPS_NSSDB_PATH_PROP,
+                        String nssdbPath =
                                 SecurityProperties.privilegedGetOverridable(
-                                        FIPS_NSSDB_PATH_PROP));
+                                        FIPS_NSSDB_PATH_PROP);
+                        if (System.getSecurityManager() != null) {
+                            AccessController.doPrivileged(
+                                    (PrivilegedAction<Void>) () -> {
+                                        System.setProperty(
+                                                FIPS_NSSDB_PATH_PROP,
+                                                nssdbPath);
+                                        return null;
+                                    });
+                        } else {
+                            System.setProperty(
+                                    FIPS_NSSDB_PATH_PROP, nssdbPath);
+                        }
                     }
                     return new SunPKCS11(new Config(newConfigName));
                 }
@@ -1433,6 +1444,7 @@ public final class SunPKCS11 extends AuthProvider {
         }
 
         @Override
+        @SuppressWarnings("removal")
         public Object newInstance(Object param)
                 throws NoSuchAlgorithmException {
             if (token.isValid() == false) {
@@ -1452,7 +1464,26 @@ public final class SunPKCS11 extends AuthProvider {
                  * property.
                  */
                 try {
-                    token.ensureLoggedIn(null);
+                    if (System.getSecurityManager() != null) {
+                        try {
+                            AccessController.doPrivileged(
+                                    (PrivilegedExceptionAction<Void>) () -> {
+                                        token.ensureLoggedIn(null);
+                                        return null;
+                                    });
+                        } catch (PrivilegedActionException pae) {
+                            Exception e = pae.getException();
+                            if (e instanceof LoginException le) {
+                                throw le;
+                            } else if (e instanceof PKCS11Exception p11e) {
+                                throw p11e;
+                            } else {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    } else {
+                        token.ensureLoggedIn(null);
+                    }
                 } catch (PKCS11Exception | LoginException e) {
                     throw new ProviderException("FIPS: error during the Token" +
                             " login required for the " + getType() +

@@ -142,6 +142,8 @@ grant codeBase "jrt:/jdk.crypto.cryptoki" {
     permission java.util.PropertyPermission "os.name", "read";
     permission java.util.PropertyPermission "os.arch", "read";
     permission java.util.PropertyPermission "jdk.crypto.KeyAgreement.legacyKDF", "read";
+    permission java.util.PropertyPermission "fips.nssdb.path", "read,write";
+    permission java.util.PropertyPermission "fips.nssdb.pin", "read";
     permission java.security.SecurityPermission "putProviderProperty.*";
     permission java.security.SecurityPermission "clearProviderProperties.*";
     permission java.security.SecurityPermission "removeProviderProperty.*";
