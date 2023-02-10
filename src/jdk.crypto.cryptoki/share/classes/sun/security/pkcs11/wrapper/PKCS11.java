@@ -153,7 +153,7 @@ public class PKCS11 {
             throws IOException, PKCS11Exception {
         connect(pkcs11ModulePath, functionListName);
         this.pkcs11ModulePath = pkcs11ModulePath;
-        pInfo = C_GetInfo();
+        pInfo = null;
     }
 
     /*
@@ -215,6 +215,12 @@ public class PKCS11 {
      * C_GetInfo. This structure represent Cryptoki library information.
      */
     public CK_INFO getInfo() {
+        if (pInfo == null) {
+            try {
+                pInfo = C_GetInfo();
+            } catch (PKCS11Exception e) {
+            }
+        }
         return pInfo;
     }
 
