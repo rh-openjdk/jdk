@@ -116,7 +116,7 @@ public class PKCS11 {
 
     private long pNativeData;
 
-    private CK_INFO pInfo;
+    private volatile CK_INFO pInfo;
 
     /**
      * This method does the initialization of the native library. It is called
@@ -153,7 +153,6 @@ public class PKCS11 {
             throws IOException, PKCS11Exception {
         connect(pkcs11ModulePath, functionListName);
         this.pkcs11ModulePath = pkcs11ModulePath;
-        pInfo = null;
     }
 
     /*
@@ -215,13 +214,21 @@ public class PKCS11 {
      * C_GetInfo. This structure represent Cryptoki library information.
      */
     public CK_INFO getInfo() {
-        if (pInfo == null) {
-            try {
-                pInfo = C_GetInfo();
-            } catch (PKCS11Exception e) {
+        CK_INFO lPInfo = pInfo;
+        if (lPInfo == null) {
+            synchronized (this) {
+                lPInfo = pInfo;
+                if (lPInfo == null) {
+                    try {
+                        lPInfo = C_GetInfo();
+                        pInfo = lPInfo;
+                    } catch (PKCS11Exception e) {
+                        // Some PKCS #11 tokens require initialization first.
+                    }
+                }
             }
         }
-        return pInfo;
+        return lPInfo;
     }
 
     /**
