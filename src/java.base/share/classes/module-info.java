@@ -156,6 +156,7 @@ module java.base {
         jdk.crypto.ec,
         jdk.jartool,
         jdk.jlink,
+        jdk.jfr,
         jdk.net,
         jdk.incubator.foreign;
     exports jdk.internal.access.foreign to

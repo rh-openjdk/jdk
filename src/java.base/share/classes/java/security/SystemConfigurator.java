@@ -78,26 +78,9 @@ final class SystemConfigurator {
      * security.useSystemPropertiesFile is true.
      */
     static boolean configureSysProps(Properties props) {
-        boolean systemSecPropsLoaded = false;
-
-        try (BufferedInputStream bis =
-                new BufferedInputStream(
-                        new FileInputStream(CRYPTO_POLICIES_JAVA_CONFIG))) {
-            props.load(bis);
-            systemSecPropsLoaded = true;
-            if (sdebug != null) {
-                sdebug.println("reading system security properties file " +
-                        CRYPTO_POLICIES_JAVA_CONFIG);
-                sdebug.println(props.toString());
-            }
-        } catch (IOException e) {
-            if (sdebug != null) {
-                sdebug.println("unable to load security properties from " +
-                        CRYPTO_POLICIES_JAVA_CONFIG);
-                e.printStackTrace();
-            }
-        }
-        return systemSecPropsLoaded;
+        // now load the system file, if it exists, so its values
+        // will win if they conflict with the earlier values
+        return Security.loadProps(null, CRYPTO_POLICIES_JAVA_CONFIG, false);
     }
 
     /*
@@ -152,7 +135,7 @@ final class SystemConfigurator {
                         sdebug.println("FIPS mode default keystore.type = " +
                                 keystoreTypeValue);
                         sdebug.println("FIPS mode javax.net.ssl.keyStore = " +
-                                System.getProperty("javax.net.ssl.keyStore", ""));
+                                        System.getProperty("javax.net.ssl.keyStore", ""));
                         sdebug.println("FIPS mode javax.net.ssl.trustStoreType = " +
                                 System.getProperty("javax.net.ssl.trustStoreType", ""));
                     }
