@@ -29,7 +29,7 @@ import java.security.Security;
  * @test
  * @bug 9999999
  * @requires (jdk.version.major >= 8)
- * @run main/othervm/timeout=30 Main
+ * @run main/othervm/timeout=30 VerifyMissingAttributes
  * @author Martin Balao (mbalao@redhat.com)
  */
 
