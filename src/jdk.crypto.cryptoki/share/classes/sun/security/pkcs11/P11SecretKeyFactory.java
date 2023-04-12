@@ -220,9 +220,11 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             }
 
             if (kdfData.kdfMech == CKM_PKCS5_PBKD2) {
-                CK_VERSION p11Ver = token.p11.getInfo().cryptokiVersion;
-                if (P11Util.isNSS(token) || p11Ver.major < 2 ||
-                        p11Ver.major == 2 && p11Ver.minor < 40) {
+                CK_INFO p11Info = token.p11.getInfo();
+                CK_VERSION p11Ver = (p11Info != null ? p11Info.cryptokiVersion
+                        : null);
+                if (P11Util.isNSS(token) || p11Ver != null && (p11Ver.major <
+                        2 || p11Ver.major == 2 && p11Ver.minor < 40)) {
                     // NSS keeps using the old structure beyond PKCS #11 v2.40
                     ckMech = new CK_MECHANISM(kdfData.kdfMech,
                             new CK_PKCS5_PBKD2_PARAMS(password, salt,
