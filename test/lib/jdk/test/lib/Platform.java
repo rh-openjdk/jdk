@@ -23,8 +23,10 @@
 
 package jdk.test.lib;
 
+import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -187,12 +189,29 @@ public class Platform {
         return vmVersion;
     }
 
+    public static boolean isMusl() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("ldd", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String l = b.readLine();
+            if (l != null && l.contains("musl")) { return true; }
+        } catch(Exception e) {
+        }
+        return false;
+    }
+
     public static boolean isAArch64() {
         return isArch("aarch64");
     }
 
     public static boolean isARM() {
         return isArch("arm.*");
+    }
+
+    public static boolean isRISCV64() {
+        return isArch("riscv64");
     }
 
     public static boolean isPPC() {
