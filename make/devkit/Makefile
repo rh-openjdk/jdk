@@ -58,7 +58,7 @@
 COMMA := ,
 
 os := $(shell uname -o)
-cpu := $(shell uname -p)
+cpu := $(shell uname -m)
 
 # Figure out what platform this is building on.
 me := $(cpu)-$(if $(findstring Linux,$(os)),linux-gnu)

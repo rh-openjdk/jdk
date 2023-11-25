@@ -62,6 +62,14 @@ ifeq ($(BASE_OS), OL)
     BASE_URL := http://yum.oracle.com/repo/OracleLinux/OL6/4/base/$(ARCH)/
     LINUX_VERSION := OL6.4
   endif
+else ifeq ($(BASE_OS), RHEL)
+  ifeq ($(ARCH), aarch64)
+    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/RHEL-7/latest-RHEL-ALT-7/compose/Server/$(ARCH)/os/Packages/
+    LINUX_VERSION := RHEL7.6
+  else
+    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/RHEL-7/latest-RHEL-7/compose/Server/$(ARCH)/os/Packages/
+    LINUX_VERSION := RHEL7.9
+  endif
 else ifeq ($(BASE_OS), Fedora)
   ifeq ($(ARCH), riscv64)
     DEFAULT_OS_VERSION := rawhide/68692
@@ -246,7 +254,7 @@ download-rpms:
         # Only run this if rpm dir is empty.
         ifeq ($(wildcard $(DOWNLOAD_RPMS)/*.rpm), )
 	  cd $(DOWNLOAD_RPMS) && \
-	      wget -r -np -nd $(patsubst %, -A "*%*.rpm", $(RPM_LIST)) $(BASE_URL)
+	      wget -r -e robots=off -np -nd $(patsubst %, -A "*%*.rpm", $(RPM_LIST)) $(BASE_URL)
         endif
 
 ##########################################################################################
