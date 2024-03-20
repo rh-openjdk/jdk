@@ -324,6 +324,9 @@ $(foreach p,$(RPM_FILE_LIST),$(eval $(call unrpm,$(p))))
 # have it anyway, but just to make sure...
 # Patch libc.so and libpthread.so to force linking against libraries in sysroot
 # and not the ones installed on the build machine.
+# Remove comment sections from static libraries and C runtime objects
+# to prevent leaking RHEL-specific package versions into
+# devkit-produced binaries.
 $(libs) : $(rpms)
 	@echo Patching libc and pthreads
 	@(for f in `find $(SYSROOT) -name libc.so -o -name libpthread.so`; do \
@@ -333,6 +336,7 @@ $(libs) : $(rpms)
 	      -e 's|/lib/||g' ) > $$f.tmp ; \
 	  mv $$f.tmp $$f ; \
 	done)
+	@find $(SYSROOT) -name '*.[ao]' -exec objcopy --remove-section .comment '{}' ';'
 	@mkdir -p $(SYSROOT)/usr/lib
 	@touch $@
 
