@@ -445,6 +445,9 @@ endif
 
 # Makefile creation. Simply run configure in build dir.
 # Setting CFLAGS to -O2 generates a much faster ld.
+# Use --enable-deterministic-archives so that make targets that
+# generate "ar" archives, such as "static-libs-image", produce
+# deterministic .a files.
 $(bfdmakes) \
 $(BUILDDIR)/$(binutils_ver)/Makefile \
     : $(BINUTILS_CFG)
@@ -459,6 +462,7 @@ $(BUILDDIR)/$(binutils_ver)/Makefile \
 	      --with-sysroot=$(SYSROOT) \
 	      --disable-nls \
 	      --program-prefix=$(TARGET)- \
+	      --enable-deterministic-archives \
 	      --enable-multilib \
 	      --enable-threads \
 	      --enable-plugins \
