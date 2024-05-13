@@ -400,7 +400,7 @@ abstract class P11Key implements Key, Length {
 
         boolean exportable = plainKeySupportEnabled && !algorithm.equals("DH");
         boolean keySensitive = (!exportable &&
-            (attrs[0].getBoolean() ||
+            ((attrs[0].getBoolean() && P11Util.isNSS(session.token)) ||
              attrs[1].getBoolean() || !attrs[2].getBoolean()));
 
         switch (algorithm) {
