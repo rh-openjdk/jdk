@@ -458,7 +458,7 @@ $(BUILDDIR)/$(binutils_ver)/Makefile \
 	      --enable-multilib \
 	      --enable-threads \
 	      --enable-plugins \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config 
 	@echo 'done'
 
 $(BUILDDIR)/$(mpfr_ver)/Makefile \
@@ -473,7 +473,7 @@ $(BUILDDIR)/$(mpfr_ver)/Makefile \
 	      --program-prefix=$(TARGET)- \
 	      --enable-shared=no \
 	      --with-gmp=$(PREFIX) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 $(BUILDDIR)/$(gmp_ver)/Makefile \
@@ -490,7 +490,7 @@ $(BUILDDIR)/$(gmp_ver)/Makefile \
 	      --program-prefix=$(TARGET)- \
 	      --enable-shared=no \
 	      --with-mpfr=$(PREFIX) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 $(BUILDDIR)/$(mpc_ver)/Makefile \
@@ -506,7 +506,7 @@ $(BUILDDIR)/$(mpc_ver)/Makefile \
 	      --enable-shared=no \
 	      --with-mpfr=$(PREFIX) \
 	      --with-gmp=$(PREFIX) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 # Only valid if glibc target -> linux
@@ -549,7 +549,7 @@ $(BUILDDIR)/$(gcc_ver)/Makefile \
 	      --with-mpfr=$(PREFIX) \
 	      --with-gmp=$(PREFIX) \
 	      --with-mpc=$(PREFIX) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 # need binutils for gcc
@@ -571,7 +571,7 @@ ifeq ($(HOST), $(TARGET))
 	  $(PATHPRE) $(ENVS) CFLAGS="$(CFLAGS)" $(GDB_CFG) \
 	      $(CONFIG) \
 	      --with-sysroot=$(SYSROOT) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
   $(gdb): $(gcc)
@@ -593,7 +593,7 @@ $(BUILDDIR)/$(ccache_ver)/Makefile \
 	  cd $(@D) ; \
 	  $(PATHPRE) $(ENVS) $(CCACHE_CFG) \
 	      $(CONFIG) \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 gccpatch = $(TARGETDIR)/gcc-patched
@@ -641,9 +641,9 @@ endif
 # Always need to build cross tools for build host self.
 $(TARGETDIR)/%.done : $(BUILDDIR)/%/Makefile
 	$(info Building $(basename $@). Log in $(<D)/log.build)
-	$(PATHPRE) $(ENVS) $(MAKE) $(BUILDPAR) -f $< -C $(<D) $(MAKECMD) $(MAKECMD.$(notdir $@)) > $(<D)/log.build 2>&1
+	$(PATHPRE) $(ENVS) $(MAKE) $(BUILDPAR) -f $< -C $(<D) $(MAKECMD) $(MAKECMD.$(notdir $@)) 2>&1 | tee $(<D)/log.build
 	@echo -n 'installing...'
-	$(PATHPRE) $(MAKE) $(INSTALLPAR) -f $< -C $(<D) $(INSTALLCMD) $(MAKECMD.$(notdir $@)) > $(<D)/log.install 2>&1
+	$(PATHPRE) $(MAKE) $(INSTALLPAR) -f $< -C $(<D) $(INSTALLCMD) $(MAKECMD.$(notdir $@)) 2>&1 | tee $(<D)/log.install
 	@mkdir -p $(@D)
 	@touch $@
 	@echo 'done'
