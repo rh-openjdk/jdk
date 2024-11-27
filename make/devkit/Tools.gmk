@@ -539,6 +539,8 @@ endif
 # skip native language.
 # and link and assemble with the binutils we created
 # earlier, so --with-gnu*
+# Add --enable-linker-build-id so the .note.gnu.build-id
+# section is added by the linker (OPENJDK-3068)
 $(BUILDDIR)/$(gcc_ver)/Makefile \
     : $(GCC_CFG)
 	$(info Configuring $@. Log in $(@D)/log.config)
@@ -557,6 +559,7 @@ $(BUILDDIR)/$(gcc_ver)/Makefile \
 	      --with-mpfr=$(PREFIX) \
 	      --with-gmp=$(PREFIX) \
 	      --with-mpc=$(PREFIX) \
+	      --enable-linker-build-id \
 	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
