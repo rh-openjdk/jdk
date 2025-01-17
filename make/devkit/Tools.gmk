@@ -64,10 +64,10 @@ ifeq ($(BASE_OS), OL)
   endif
 else ifeq ($(BASE_OS), RHEL)
   ifeq ($(ARCH), aarch64)
-    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/RHEL-7/latest-RHEL-ALT-7/compose/Server/$(ARCH)/os/Packages/
+    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/updates/RHEL-ALT-7/latest-RHEL-ALT-7/compose/Server/$(ARCH)/os/Packages/
     LINUX_VERSION := RHEL7.6
   else
-    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/RHEL-7/latest-RHEL-7/compose/Server/$(ARCH)/os/Packages/
+    BASE_URL := https://download.eng.brq.redhat.com/rhel-7/rel-eng/updates/RHEL-7/latest-RHEL-7/compose/Server/$(ARCH)/os/Packages/
     LINUX_VERSION := RHEL7.9
   endif
 else ifeq ($(BASE_OS), Fedora)
