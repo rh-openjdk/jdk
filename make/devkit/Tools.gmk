@@ -219,8 +219,12 @@ RPM_LIST := \
     zlib zlib-devel \
     libffi libffi-devel \
     fontconfig fontconfig-devel \
-    systemtap-sdt-devel \
     #
+
+# Only include SystemTap on supported architectures
+ifeq ($(filter ppc64 ppc64le s390x, $(ARCH)), )
+  RPM_LIST += systemtap-sdt-devel
+endif
 
 ##########################################################################################
 # Define common directories and files
