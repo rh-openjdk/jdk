@@ -195,6 +195,10 @@ MPFR := https://www.mpfr.org/${mpfr_ver}/${mpfr_ver}.tar.bz2
 GMP := http://ftp.gnu.org/pub/gnu/gmp/${gmp_ver}.tar.bz2
 MPC := http://ftp.gnu.org/pub/gnu/mpc/${mpc_ver}.tar.gz
 GDB := http://ftp.gnu.org/gnu/gdb/${gdb_ver}.tar.xz
+ifneq (,$(annobin_ver))
+  ANNOBIN := https://nickc.fedorapeople.org/$(annobin_ver).tar.xz
+  gcc_ver_only := $(patsubst gcc-%,%,$(gcc_ver))
+endif
 
 # RPMs used by all BASE_OS
 RPM_LIST := \
@@ -280,7 +284,7 @@ define Download
 endef
 
 # Download and unpack all source packages
-$(foreach p,GCC BINUTILS CCACHE MPFR GMP MPC GDB,$(eval $(call Download,$(p))))
+$(foreach p,GCC BINUTILS CCACHE MPFR GMP MPC GDB $(if $(annobin_ver),ANNOBIN),$(eval $(call Download,$(p))))
 
 ##########################################################################################
 # Unpack RPMS
@@ -360,7 +364,7 @@ endif
 ##########################################################################################
 
 # Define marker files for each source package to be compiled
-$(foreach t,binutils mpfr gmp mpc gcc ccache gdb,$(eval $(t) = $(TARGETDIR)/$($(t)_ver).done))
+$(foreach t,binutils mpfr gmp mpc gcc ccache gdb $(if $(annobin_ver),annobin),$(eval $(t) = $(TARGETDIR)/$($(t)_ver).done))
 
 ##########################################################################################
 
@@ -432,6 +436,7 @@ $(gcc) \
     $(mpfr) \
     $(mpc) \
     $(bfdmakes) \
+    $(if $(annobin_ver),$(annobin)) \
     $(ccache) : ENVS += $(TOOLS)
 
 # libdir to work around hateful bfd stuff installing into wrong dirs...
@@ -521,6 +526,28 @@ $(BUILDDIR)/$(mpc_ver)/Makefile \
 	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
+ifneq (,$(annobin_ver))
+  $(BUILDDIR)/$(annobin_ver)/Makefile \
+    : $(ANNOBIN_CFG)
+	$(info Configuring $@. Log in $(@D)/log.config)
+	@mkdir -p $(@D)
+	( \
+	  cd $(@D) ; \
+	  $(PATHPRE) $(ENVS) CFLAGS="$(CFLAGS) -I$(PREFIX)/include" CXXFLAGS="$(CFLAGS) -I$(PREFIX)/include" \
+	      $(ANNOBIN_CFG) \
+	      $(CONFIG) \
+	      --with-gcc-plugin-dir=$(PREFIX)/lib/gcc/$(TARGET)/$(gcc_ver_only)/plugin \
+	      --without-annocheck \
+	      --without-tests \
+	      --without-docs \
+	      --disable-rpath \
+	      --without-debuginfod \
+	      --without-clang-plugin \
+	      --without-llvm-plugin \
+	) > $(@D)/log.config 2>&1
+	@echo 'done'
+endif
+
 # Only valid if glibc target -> linux
 # proper destructor handling for c++
 ifneq (,$(findstring linux,$(TARGET)))
@@ -574,6 +601,10 @@ $(gcc) : $(binutils)
 $(BUILDDIR)/$(gcc_ver)/Makefile : $(gmp) $(mpfr) $(mpc)
 $(mpfr) : $(gmp)
 $(mpc) : $(gmp) $(mpfr)
+
+ifneq (,$(annobin_ver))
+  $(annobin) : $(gcc) $(gmp)
+endif
 
 ################################################################################
 # Build gdb but only where host and target match
@@ -718,10 +749,13 @@ libs : $(libs)
 sysroot : rpms libs
 gcc : sysroot $(gcc) $(gccpatch)
 gdb : $(gdb)
+ifneq (,$(annobin_ver))
+  annobin : $(annobin)
+endif
 all : binutils gcc bfdlib $(PREFIX)/devkit.info $(missing-links) $(SYSROOT_LINKS) \
-    $(THESE_MAKEFILES) gdb
+    $(THESE_MAKEFILES) gdb $(if $(annobin_ver),annobin)
 
 # this is only built for host. so separate.
 ccache : $(ccache)
 
-.PHONY : gcc all binutils bfdlib link_libs rpms libs sysroot
+.PHONY : gcc all binutils bfdlib link_libs rpms libs sysroot $(if $(annobin_ver),annobin)
