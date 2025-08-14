@@ -475,7 +475,7 @@ $(BUILDDIR)/$(binutils_ver)/Makefile \
 	      --enable-multilib \
 	      --enable-threads \
 	      --enable-plugins \
-	) 2>&1 | tee $(@D)/log.config 
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 
 $(BUILDDIR)/$(mpfr_ver)/Makefile \
@@ -544,7 +544,7 @@ ifneq (,$(annobin_ver))
 	      --without-debuginfod \
 	      --without-clang-plugin \
 	      --without-llvm-plugin \
-	) > $(@D)/log.config 2>&1
+	) 2>&1 | tee $(@D)/log.config
 	@echo 'done'
 endif
 
