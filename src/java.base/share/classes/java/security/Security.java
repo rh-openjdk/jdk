@@ -323,7 +323,27 @@ public final class Security {
     }
 
     private static void initialize() {
+        /* vvvvvvvvvvvvvvvvvvvvvvvvvvv FIPS PATCH vvvvvvvvvvvvvvvvvvvvvvvvvvv */
+        /*   This 'include'-directives-only magic property is an internal     */
+        /*   implementation detail that could (and probably will!) change.    */
+        /*   Red Hat customers should NOT rely on this for their own use.     */
+        String fipsKernelFlag = "/proc/sys/crypto/fips_enabled";
+        boolean fipsModeOn;
+        try (InputStream is = new java.io.FileInputStream(fipsKernelFlag)) {
+            fipsModeOn = is.read() == '1';
+        } catch (IOException ioe) {
+            fipsModeOn = false;
+            if (sdebug != null) {
+                sdebug.println("Failed to read FIPS kernel file: " + ioe);
+            }
+        }
+        String fipsMagicPropName = "__redhat_fips__";
+        System.setProperty(fipsMagicPropName, "" + fipsModeOn);
+        /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^ FIPS PATCH ^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
         SecPropLoader.loadAll();
+        /* vvvvvvvvvvvvvvvvvvvvvvvvvvv FIPS PATCH vvvvvvvvvvvvvvvvvvvvvvvvvvv */
+        System.clearProperty(fipsMagicPropName);
+        /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^ FIPS PATCH ^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
         initialSecurityProperties = (Properties) props.clone();
         if (sdebug != null) {
             for (String key : props.stringPropertyNames()) {
