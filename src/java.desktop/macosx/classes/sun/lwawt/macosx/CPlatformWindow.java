@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -42,6 +42,7 @@ import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.FocusEvent;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowStateListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
@@ -63,6 +64,7 @@ import sun.awt.AWTAccessor;
 import sun.awt.AWTAccessor.ComponentAccessor;
 import sun.awt.AWTAccessor.WindowAccessor;
 import sun.java2d.SurfaceData;
+import sun.lwawt.LWKeyboardFocusManagerPeer;
 import sun.lwawt.LWLightweightFramePeer;
 import sun.lwawt.LWToolkit;
 import sun.lwawt.LWWindowPeer;
@@ -965,6 +967,33 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
         return isFullScreenMode;
     }
 
+    private void waitForWindowState(int state) {
+        if (peer.getState() == state) {
+            return;
+        }
+
+        Object lock = new Object();
+        WindowStateListener wsl = new WindowStateListener() {
+            public void windowStateChanged(WindowEvent e) {
+                synchronized (lock) {
+                    if (e.getNewState() == state) {
+                        lock.notifyAll();
+                    }
+                }
+            }
+        };
+
+        target.addWindowStateListener(wsl);
+        if (peer.getState() != state) {
+            synchronized (lock) {
+                try {
+                    lock.wait();
+                } catch (InterruptedException ie) {}
+            }
+        }
+        target.removeWindowStateListener(wsl);
+    }
+
     @Override
     public void setWindowState(int windowState) {
         if (peer == null || !peer.isVisible()) {
@@ -986,6 +1015,7 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
                     // let's return into the normal states first
                     // the zoom call toggles between the normal and the max states
                     unmaximize();
+                    waitForWindowState(Frame.NORMAL);
                 }
                 execute(CWrapper.NSWindow::miniaturize);
                 break;
@@ -993,6 +1023,8 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
                 if (prevWindowState == Frame.ICONIFIED) {
                     // let's return into the normal states first
                     execute(CWrapper.NSWindow::deminiaturize);
+                    waitForWindowState(Frame.NORMAL);
+
                 }
                 maximize();
                 break;
@@ -1026,6 +1058,11 @@ public class CPlatformWindow extends CFRetainedResource implements PlatformWindo
         }
 
         execute(ptr -> nativeSetEnabled(ptr, !blocked));
+
+        Window currFocus = LWKeyboardFocusManagerPeer.getInstance().getCurrentFocusedWindow();
+        if (!blocked && (target == currFocus)) {
+            requestWindowFocus();
+        }
         checkBlockingAndOrder();
     }
 

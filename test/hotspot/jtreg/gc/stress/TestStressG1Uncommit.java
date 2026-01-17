@@ -57,10 +57,10 @@ public class TestStressG1Uncommit {
         Collections.addAll(options,
             "-Xlog:gc,gc+heap+region=debug",
             "-XX:+UseG1GC",
+            "-Xmx1g",
             StressUncommit.class.getName()
         );
-        ProcessBuilder pb = ProcessTools.createLimitedTestJavaProcessBuilder(options);
-        OutputAnalyzer output = new OutputAnalyzer(pb.start());
+        OutputAnalyzer output = ProcessTools.executeLimitedTestJava(options);
         output.shouldHaveExitValue(0);
         output.shouldMatch("Uncommit regions");
         output.outputTo(System.out);
@@ -80,9 +80,9 @@ class StressUncommit {
         // Leave 20% head room to try to avoid Full GCs.
         long allocationSize = (long) (Runtime.getRuntime().maxMemory() * 0.8);
 
-        // Figure out suitable number of workers (~1 per gig).
-        int gigsOfAllocation = (int) Math.ceil((double) allocationSize / G);
-        int numWorkers = Math.min(gigsOfAllocation, Runtime.getRuntime().availableProcessors());
+        // Figure out suitable number of workers (~1 per 100M).
+        int allocationChunks = (int) Math.ceil((double) allocationSize / (100 * M));
+        int numWorkers = Math.min(allocationChunks, Runtime.getRuntime().availableProcessors());
         long workerAllocation = allocationSize / numWorkers;
 
         log("Using " + numWorkers + " workers, each allocating: ~" + (workerAllocation / M) + "M");

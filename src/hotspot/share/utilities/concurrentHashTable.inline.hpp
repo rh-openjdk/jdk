@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -679,7 +679,9 @@ inline bool ConcurrentHashTable<CONFIG, F>::
         // Keep in odd list
         odd = aux->next_ptr();
       } else {
-        fatal("aux_index does not match even or odd indices");
+        const char* msg = "Cannot resize table: Node hash code has changed possibly due to corruption of the contents.";
+        DEBUG_ONLY(fatal("%s Node hash code changed from " SIZE_FORMAT " to " SIZE_FORMAT, msg, aux->saved_hash(), aux_hash);)
+        NOT_DEBUG(fatal("%s", msg);)
       }
     }
     aux = aux_next;
@@ -892,6 +894,7 @@ inline bool ConcurrentHashTable<CONFIG, F>::
   size_t i = 0;
   uintx hash = lookup_f.get_hash();
   Node* new_node = Node::create_node(_context, value, nullptr);
+  DEBUG_ONLY(new_node->set_saved_hash(hash);)
 
   while (true) {
     {
@@ -1012,7 +1015,7 @@ inline size_t ConcurrentHashTable<CONFIG, F>::
 // Constructor
 template <typename CONFIG, MEMFLAGS F>
 inline ConcurrentHashTable<CONFIG, F>::
-ConcurrentHashTable(size_t log2size, size_t log2size_limit, size_t grow_hint, bool enable_statistics, void* context)
+ConcurrentHashTable(size_t log2size, size_t log2size_limit, size_t grow_hint, bool enable_statistics, Mutex::Rank rank, void* context)
     : _context(context), _new_table(nullptr), _log2_size_limit(log2size_limit),
       _log2_start_size(log2size), _grow_hint(grow_hint),
       _size_limit_reached(false), _resize_lock_owner(nullptr),
@@ -1023,8 +1026,7 @@ ConcurrentHashTable(size_t log2size, size_t log2size_limit, size_t grow_hint, bo
   } else {
     _stats_rate = nullptr;
   }
-  _resize_lock =
-    new Mutex(Mutex::nosafepoint-2, "ConcurrentHashTableResize_lock");
+  _resize_lock = new Mutex(rank, "ConcurrentHashTableResize_lock");
   _table = new InternalTable(log2size);
   assert(log2size_limit >= log2size, "bad ergo");
   _size_limit_reached = _table->_log2_size == _log2_size_limit;
@@ -1109,6 +1111,7 @@ inline bool ConcurrentHashTable<CONFIG, F>::
   Bucket* bucket = get_bucket_in(table, hash);
   assert(!bucket->have_redirect() && !bucket->is_locked(), "bad");
   Node* new_node = Node::create_node(_context, value, bucket->first());
+  DEBUG_ONLY(new_node->set_saved_hash(hash);)
   if (!bucket->cas_first(new_node, bucket->first())) {
     assert(false, "bad");
   }
@@ -1223,23 +1226,30 @@ template <typename VALUE_SIZE_FUNC>
 inline TableStatistics ConcurrentHashTable<CONFIG, F>::
   statistics_calculate(Thread* thread, VALUE_SIZE_FUNC& vs_f)
 {
+  constexpr size_t batch_size = 128;
   NumberSeq summary;
   size_t literal_bytes = 0;
   InternalTable* table = get_table();
-  for (size_t bucket_it = 0; bucket_it < table->_size; bucket_it++) {
+  size_t num_batches = table->_size / batch_size;
+  for (size_t batch_start = 0; batch_start < _table->_size; batch_start += batch_size) {
+    // We batch the use of ScopedCS here as it has been found to be quite expensive to
+    // invoke it for every single bucket.
+    size_t batch_end = MIN2(batch_start + batch_size, _table->_size);
     ScopedCS cs(thread, this);
-    size_t count = 0;
-    Bucket* bucket = table->get_bucket(bucket_it);
-    if (bucket->have_redirect() || bucket->is_locked()) {
-      continue;
+    for (size_t bucket_it = batch_start; bucket_it < batch_end; bucket_it++) {
+      size_t count = 0;
+      Bucket* bucket = table->get_bucket(bucket_it);
+      if (bucket->have_redirect() || bucket->is_locked()) {
+        continue;
+      }
+      Node* current_node = bucket->first();
+      while (current_node != nullptr) {
+        ++count;
+        literal_bytes += vs_f(current_node->value());
+        current_node = current_node->next();
+      }
+      summary.add((double)count);
     }
-    Node* current_node = bucket->first();
-    while (current_node != nullptr) {
-      ++count;
-      literal_bytes += vs_f(current_node->value());
-      current_node = current_node->next();
-    }
-    summary.add((double)count);
   }
 
   if (_stats_rate == nullptr) {

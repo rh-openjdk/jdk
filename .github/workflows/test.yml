@@ -37,6 +37,9 @@ on:
       runs-on:
         required: true
         type: string
+      xcode-toolset-version:
+        required: false
+        type: string
 
 env:
   # These are needed to make the MSYS2 bash work properly
@@ -147,7 +150,7 @@ jobs:
         run: |
           # On macOS we need to install some dependencies for testing
           brew install make
-          sudo xcode-select --switch /Applications/Xcode_14.3.1.app/Contents/Developer
+          sudo xcode-select --switch /Applications/Xcode_${{ inputs.xcode-toolset-version }}.app/Contents/Developer
           # This will make GNU make available as 'make' and not only as 'gmake'
           echo '/usr/local/opt/make/libexec/gnubin' >> $GITHUB_PATH
         if: runner.os == 'macOS'
@@ -211,7 +214,7 @@ jobs:
         if: always()
 
       - name: 'Upload test results'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: results
           name: ${{ steps.package.outputs.artifact-name }}
@@ -219,7 +222,7 @@ jobs:
 
         # This is the best way I found to abort the job with an error message
       - name: 'Notify about test failures'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: core.setFailed('${{ steps.run-tests.outputs.error-message }}')
         if: steps.run-tests.outputs.failure == 'true'

@@ -408,6 +408,19 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
   initialize_class(vmSymbols::java_lang_invoke_MethodHandleNatives(), CHECK);
 }
 
+// One-shot PeriodicTask subclass for reading the release file
+class ReadReleaseFileTask : public PeriodicTask {
+ public:
+  ReadReleaseFileTask() : PeriodicTask(100) {}
+
+  virtual void task() {
+    os::read_image_release_file();
+
+    // Reclaim our storage and disenroll ourself.
+    delete this;
+  }
+};
+
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   extern void JDK_Version_init();
 
@@ -554,6 +567,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
     return status;
   }
+
+  // Have the WatcherThread read the release file in the background.
+  ReadReleaseFileTask* read_task = new ReadReleaseFileTask();
+  read_task->enroll();
 
   // Create WatcherThread as soon as we can since we need it in case
   // of hangs during error reporting.
@@ -823,10 +840,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
 // Threads::destroy_vm() is normally called from jni_DestroyJavaVM() when
 // the program falls off the end of main(). Another VM exit path is through
-// vm_exit() when the program calls System.exit() to return a value or when
-// there is a serious error in VM. The two shutdown paths are not exactly
-// the same, but they share Shutdown.shutdown() at Java level and before_exit()
-// and VM_Exit op at VM level.
+// vm_exit(), when the program calls System.exit() to return a value, or when
+// there is a serious error in VM.
+// These two separate shutdown paths are not exactly the same, but they share
+// Shutdown.shutdown() at Java level and before_exit() and VM_Exit op at VM level.
 //
 // Shutdown sequence:
 //   + Shutdown native memory tracking if it is on
@@ -1008,7 +1025,7 @@ void Threads::add(JavaThread* p, bool force_daemon) {
   ObjectSynchronizer::inc_in_use_list_ceiling();
 
   // Possible GC point.
-  Events::log(p, "Thread added: " INTPTR_FORMAT, p2i(p));
+  Events::log(Thread::current(), "Thread added: " INTPTR_FORMAT, p2i(p));
 
   // Make new thread known to active EscapeBarrier
   EscapeBarrier::thread_added(p);
@@ -1017,7 +1034,9 @@ void Threads::add(JavaThread* p, bool force_daemon) {
 void Threads::remove(JavaThread* p, bool is_daemon) {
   // Extra scope needed for Thread_lock, so we can check
   // that we do not remove thread without safepoint code notice
-  { MonitorLocker ml(Threads_lock);
+  {
+    MutexLocker throttle_ml(UseThreadsLockThrottleLock ? ThreadsLockThrottle_lock : nullptr);
+    MonitorLocker ml(Threads_lock);
 
     if (ThreadIdTable::is_initialized()) {
       // This cleanup must be done before the current thread's GC barrier
@@ -1065,13 +1084,13 @@ void Threads::remove(JavaThread* p, bool is_daemon) {
 
     // Notify threads waiting in EscapeBarriers
     EscapeBarrier::thread_removed(p);
-  } // unlock Threads_lock
+  } // unlock Threads_lock and ThreadsLockThrottle_lock
 
   // Reduce the ObjectMonitor ceiling for the exiting thread.
   ObjectSynchronizer::dec_in_use_list_ceiling();
 
   // Since Events::log uses a lock, we grab it outside the Threads_lock
-  Events::log(p, "Thread exited: " INTPTR_FORMAT, p2i(p));
+  Events::log(Thread::current(), "Thread exited: " INTPTR_FORMAT, p2i(p));
 }
 
 // Operations on the Threads list for GC.  These are not explicitly locked,
@@ -1317,10 +1336,7 @@ void Threads::print_on(outputStream* st, bool print_stacks,
   }
 
   PrintOnClosure cl(st);
-  cl.do_thread(VMThread::vm_thread());
-  Universe::heap()->gc_threads_do(&cl);
-  cl.do_thread(WatcherThread::watcher_thread());
-  cl.do_thread(AsyncLogWriter::instance());
+  non_java_threads_do(&cl);
 
   st->flush();
 }

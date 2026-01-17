@@ -1388,6 +1388,11 @@ void GraphBuilder::jsr(int dest) {
   // If the bytecodes are strange (jumping out of a jsr block) then we
   // might end up trying to re-parse a block containing a jsr which
   // has already been activated. Watch for this case and bail out.
+  if (next_bci() >= method()->code_size()) {
+    // This can happen if the subroutine does not terminate with a ret,
+    // effectively turning the jsr into a goto.
+    BAILOUT("too-complicated jsr/ret structure");
+  }
   for (ScopeData* cur_scope_data = scope_data();
        cur_scope_data != nullptr && cur_scope_data->parsing_jsr() && cur_scope_data->scope() == scope();
        cur_scope_data = cur_scope_data->parent()) {
@@ -2516,6 +2521,8 @@ XHandlers* GraphBuilder::handle_exception(Instruction* instruction) {
 
         // xhandler start with an empty expression stack
         if (cur_state->stack_size() != 0) {
+          // locals are preserved
+          // stack will be truncated
           cur_state = cur_state->copy(ValueStack::ExceptionState, cur_state->bci());
         }
         if (instruction->exception_state() == nullptr) {
@@ -2565,15 +2572,19 @@ XHandlers* GraphBuilder::handle_exception(Instruction* instruction) {
       // This scope and all callees do not handle exceptions, so the local
       // variables of this scope are not needed. However, the scope itself is
       // required for a correct exception stack trace -> clear out the locals.
-      if (_compilation->env()->should_retain_local_variables()) {
-        cur_state = cur_state->copy(ValueStack::ExceptionState, cur_state->bci());
-      } else {
-        cur_state = cur_state->copy(ValueStack::EmptyExceptionState, cur_state->bci());
-      }
+      // Stack and locals are invalidated but not truncated in caller state.
       if (prev_state != nullptr) {
+        assert(instruction->exception_state() != nullptr, "missed set?");
+        ValueStack::Kind exc_kind = ValueStack::empty_exception_kind(true /* caller */);
+        cur_state = cur_state->copy(exc_kind, cur_state->bci());
+        // reset caller exception state
         prev_state->set_caller_state(cur_state);
-      }
-      if (instruction->exception_state() == nullptr) {
+      } else {
+        assert(instruction->exception_state() == nullptr, "already set");
+        // set instruction exception state
+        // truncate stack
+        ValueStack::Kind exc_kind = ValueStack::empty_exception_kind();
+        cur_state = cur_state->copy(exc_kind, cur_state->bci());
         instruction->set_exception_state(cur_state);
       }
     }
@@ -3486,11 +3497,9 @@ ValueStack* GraphBuilder::copy_state_exhandling_with_bci(int bci) {
 ValueStack* GraphBuilder::copy_state_for_exception_with_bci(int bci) {
   ValueStack* s = copy_state_exhandling_with_bci(bci);
   if (s == nullptr) {
-    if (_compilation->env()->should_retain_local_variables()) {
-      s = state()->copy(ValueStack::ExceptionState, bci);
-    } else {
-      s = state()->copy(ValueStack::EmptyExceptionState, bci);
-    }
+    // no handler, no need to retain locals
+    ValueStack::Kind exc_kind = ValueStack::empty_exception_kind();
+    s = state()->copy(exc_kind, bci);
   }
   return s;
 }
@@ -3716,6 +3725,9 @@ bool GraphBuilder::try_inline_intrinsics(ciMethod* callee, bool ignore_return) {
 bool GraphBuilder::try_inline_jsr(int jsr_dest_bci) {
   // Introduce a new callee continuation point - all Ret instructions
   // will be replaced with Gotos to this point.
+  if (next_bci() >= method()->code_size()) {
+    return false;
+  }
   BlockBegin* cont = block_at(next_bci());
   assert(cont != nullptr, "continuation must exist (BlockListBuilder starts a new block after a jsr");
 

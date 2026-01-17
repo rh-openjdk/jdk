@@ -219,6 +219,10 @@ class os: AllStatic {
   static void   pd_free_memory(char *addr, size_t bytes, size_t alignment_hint);
   static void   pd_realign_memory(char *addr, size_t bytes, size_t alignment_hint);
 
+  // Returns 0 if pretouch is done via platform dependent method, or otherwise
+  // returns page_size that should be used for the common method.
+  static size_t pd_pretouch_memory(void* first, void* last, size_t page_size);
+
   static char*  pd_reserve_memory_special(size_t size, size_t alignment, size_t page_size,
 
                                           char* addr, bool executable);
@@ -636,6 +640,11 @@ class os: AllStatic {
   static FILE* fopen(const char* path, const char* mode);
   static jlong lseek(int fd, jlong offset, int whence);
   static bool file_exists(const char* file);
+
+  // read/store and print the release file of the image
+  static void read_image_release_file();
+  static void print_image_release_file(outputStream* st);
+
   // This function, on Windows, canonicalizes a given path (see os_windows.cpp for details).
   // On Posix, this function is a noop: it does not change anything and just returns
   // the input pointer.
@@ -771,6 +780,7 @@ class os: AllStatic {
   static void print_summary_info(outputStream* st, char* buf, size_t buflen);
   static void print_memory_info(outputStream* st);
   static void print_dll_info(outputStream* st);
+  static void print_jvmti_agent_info(outputStream* st);
   static void print_environment_variables(outputStream* st, const char** env_list);
   static void print_context(outputStream* st, const void* context);
   static void print_tos_pc(outputStream* st, const void* context);

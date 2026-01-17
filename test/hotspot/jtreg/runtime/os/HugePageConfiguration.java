@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2023, Red Hat Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -84,6 +84,20 @@ class HugePageConfiguration {
         return _thpPageSize;
     }
 
+    // Returns the THP page size (if exposed by the kernel) or a guessed THP page size.
+    // Mimics HugePages::thp_pagesize_fallback() method in hotspot (must be kept in sync with it).
+    public long getThpPageSizeOrFallback() {
+        long pageSize = getThpPageSize();
+        if (pageSize != 0) {
+            return pageSize;
+        }
+        pageSize = getStaticDefaultHugePageSize();
+        if (pageSize != 0) {
+            return Math.min(pageSize, 16 * 1024 * 1024);
+        }
+        return 2 * 1024 * 1024;
+    }
+
     // Returns true if the THP support is enabled
     public boolean supportsTHP() {
         return _thpMode == THPMode.always || _thpMode == THPMode.madvise;
@@ -127,7 +141,6 @@ class HugePageConfiguration {
             while (scanner.hasNextLine()) {
                 Matcher mat = pat.matcher(scanner.nextLine());
                 if (mat.matches()) {
-                    scanner.close();
                     return Long.parseLong(mat.group(1)) * 1024;
                 }
             }

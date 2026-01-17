@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2022, 2023, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -37,6 +37,9 @@ on:
       runs-on:
         required: true
         type: string
+      xcode-toolset-version:
+        required: false
+        type: string
 
 env:
   # These are needed to make the MSYS2 bash work properly
@@ -71,7 +74,7 @@ jobs:
 
     steps:
       - name: 'Checkout the JDK source'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 'Get MSYS2'
         uses: ./.github/actions/get-msys2
@@ -98,7 +101,7 @@ jobs:
         run: |
           # On macOS we need to install some dependencies for testing
           brew install make
-          sudo xcode-select --switch /Applications/Xcode_11.7.app/Contents/Developer
+          sudo xcode-select --switch /Applications/Xcode_${{ inputs.xcode-toolset-version }}.app/Contents/Developer
           # This will make GNU make available as 'make' and not only as 'gmake'
           echo '/usr/local/opt/make/libexec/gnubin' >> $GITHUB_PATH
         if: runner.os == 'macOS'
@@ -161,12 +164,12 @@ jobs:
             echo '::warning ::Missing test-support directory'
           fi
 
-          artifact_name="results-${{ inputs.platform }}-$(echo ${{ matrix.test-name }} | tr '/ ' '__')"
+          artifact_name="fips-results-${{ inputs.platform }}-$(echo ${{ matrix.test-name }} | tr '/ ' '__')"
           echo "artifact-name=$artifact_name" >> $GITHUB_OUTPUT
         if: always()
 
       - name: 'Upload test results'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: results
           name: ${{ steps.package.outputs.artifact-name }}
@@ -174,7 +177,7 @@ jobs:
 
         # This is the best way I found to abort the job with an error message
       - name: 'Notify about test failures'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: core.setFailed('${{ steps.run-tests.outputs.error-message }}')
         if: steps.run-tests.outputs.failure == 'true'

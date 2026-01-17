@@ -72,7 +72,6 @@ class ShenandoahSATBAndRemarkThreadsClosure : public ThreadClosure {
 private:
   SATBMarkQueueSet& _satb_qset;
   OopClosure* const _cl;
-  uintx _claim_token;
 
 public:
   ShenandoahSATBAndRemarkThreadsClosure(SATBMarkQueueSet& satb_qset, OopClosure* cl) :
@@ -187,7 +186,7 @@ private:
   SATBMarkQueueSet& _qset;
 public:
   ShenandoahFlushSATBHandshakeClosure(SATBMarkQueueSet& qset) :
-    HandshakeClosure("Shenandoah Flush SATB Handshake"),
+    HandshakeClosure("Shenandoah Flush SATB"),
     _qset(qset) {}
 
   void do_thread(Thread* thread) {

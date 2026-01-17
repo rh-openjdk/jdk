@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
 /*
  * @test
  * @bug 8087112 8180044 8256459
+ * @key intermittent
  * @modules java.net.http
  *          java.logging
  *          jdk.httpserver
@@ -187,7 +188,7 @@ public class ManyRequests {
 
         URI baseURI = URIBuilder.newBuilder()
                 .scheme("https")
-                .host(InetAddress.getLoopbackAddress().getHostName())
+                .loopback()
                 .port(port)
                 .path("/foo/x").build();
         server.createContext("/foo", new TestEchoHandler());

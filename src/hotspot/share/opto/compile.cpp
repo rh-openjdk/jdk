@@ -53,6 +53,7 @@
 #include "opto/divnode.hpp"
 #include "opto/escape.hpp"
 #include "opto/idealGraphPrinter.hpp"
+#include "opto/locknode.hpp"
 #include "opto/loopnode.hpp"
 #include "opto/machnode.hpp"
 #include "opto/macro.hpp"
@@ -622,7 +623,6 @@ Compile::Compile( ciEnv* ci_env, ciMethod* target, int osr_bci,
                   _env(ci_env),
                   _directive(directive),
                   _log(ci_env->log()),
-                  _failure_reason(nullptr),
                   _intrinsics        (comp_arena(), 0, 0, nullptr),
                   _macro_nodes       (comp_arena(), 8, 0, nullptr),
                   _parse_predicate_opaqs (comp_arena(), 8, 0, nullptr),
@@ -919,7 +919,6 @@ Compile::Compile( ciEnv* ci_env,
     _env(ci_env),
     _directive(directive),
     _log(ci_env->log()),
-    _failure_reason(nullptr),
     _congraph(nullptr),
     NOT_PRODUCT(_igv_printer(nullptr) COMMA)
     _dead_node_list(comp_arena()),
@@ -1462,12 +1461,18 @@ const TypePtr *Compile::flatten_alias_type( const TypePtr *tj ) const {
     } else {
       ciInstanceKlass *canonical_holder = ik->get_canonical_holder(offset);
       assert(offset < canonical_holder->layout_helper_size_in_bytes(), "");
-      if (!ik->equals(canonical_holder) || tj->offset() != offset) {
-        if( is_known_inst ) {
-          tj = to = TypeInstPtr::make(to->ptr(), canonical_holder, true, nullptr, offset, to->instance_id());
-        } else {
-          tj = to = TypeInstPtr::make(to->ptr(), canonical_holder, false, nullptr, offset);
-        }
+      assert(tj->offset() == offset, "no change to offset expected");
+      bool xk = to->klass_is_exact();
+      int instance_id = to->instance_id();
+
+      // If the input type's class is the holder: if exact, the type only includes interfaces implemented by the holder
+      // but if not exact, it may include extra interfaces: build new type from the holder class to make sure only
+      // its interfaces are included.
+      if (xk && ik->equals(canonical_holder)) {
+        assert(tj == TypeInstPtr::make(to->ptr(), canonical_holder, is_known_inst, nullptr, offset, instance_id), "exact type should be canonical type");
+      } else {
+        assert(xk || !is_known_inst, "Known instance should be exact type");
+        tj = to = TypeInstPtr::make(to->ptr(), canonical_holder, is_known_inst, nullptr, offset, instance_id);
       }
     }
   }
@@ -1936,7 +1941,7 @@ void Compile::process_for_unstable_if_traps(PhaseIterGVN& igvn) {
         if (!live_locals.at(i) && !local->is_top() && local != lhs && local!= rhs) {
           uint idx = jvms->locoff() + i;
 #ifdef ASSERT
-          if (Verbose) {
+          if (PrintOpto && Verbose) {
             tty->print("[unstable_if] kill local#%d: ", idx);
             local->dump();
             tty->cr();
@@ -2993,9 +2998,8 @@ void Compile::Code_Gen() {
     output.Output();
     if (failing())  return;
     output.install();
+    print_method(PHASE_FINAL_CODE, 1); // Compile::_output is not null here
   }
-
-  print_method(PHASE_FINAL_CODE, 1);
 
   // He's dead, Jim.
   _cfg     = (PhaseCFG*)((intptr_t)0xdeadbeef);
@@ -3304,8 +3308,8 @@ void Compile::final_graph_reshaping_main_switch(Node* n, Final_Reshape_Counts& f
       bool is_oop   = t->isa_oopptr() != nullptr;
       bool is_klass = t->isa_klassptr() != nullptr;
 
-      if ((is_oop   && Matcher::const_oop_prefer_decode()  ) ||
-          (is_klass && Matcher::const_klass_prefer_decode())) {
+      if ((is_oop   && UseCompressedOops          && Matcher::const_oop_prefer_decode()  ) ||
+          (is_klass && UseCompressedClassPointers && Matcher::const_klass_prefer_decode())) {
         Node* nn = nullptr;
 
         int op = is_oop ? Op_ConN : Op_ConNKlass;
@@ -4328,9 +4332,9 @@ void Compile::record_failure(const char* reason) {
   if (log() != nullptr) {
     log()->elem("failure reason='%s' phase='compile'", reason);
   }
-  if (_failure_reason == nullptr) {
+  if (_failure_reason.get() == nullptr) {
     // Record the first failure reason.
-    _failure_reason = reason;
+    _failure_reason.set(reason);
   }
 
   if (!C->failure_reason_is(C2Compiler::retry_no_subsuming_loads())) {
@@ -4809,10 +4813,26 @@ void Compile::add_coarsened_locks(GrowableArray<AbstractLockNode*>& locks) {
   if (length > 0) {
     // Have to keep this list until locks elimination during Macro nodes elimination.
     Lock_List* locks_list = new (comp_arena()) Lock_List(comp_arena(), length);
+    AbstractLockNode* alock = locks.at(0);
+    BoxLockNode* box = alock->box_node()->as_BoxLock();
     for (int i = 0; i < length; i++) {
       AbstractLockNode* lock = locks.at(i);
       assert(lock->is_coarsened(), "expecting only coarsened AbstractLock nodes, but got '%s'[%d] node", lock->Name(), lock->_idx);
       locks_list->push(lock);
+      BoxLockNode* this_box = lock->box_node()->as_BoxLock();
+      if (this_box != box) {
+        // Locking regions (BoxLock) could be Unbalanced here:
+        //  - its coarsened locks were eliminated in earlier
+        //    macro nodes elimination followed by loop unroll
+        //  - it is OSR locking region (no Lock node)
+        // Preserve Unbalanced status in such cases.
+        if (!this_box->is_unbalanced()) {
+          this_box->set_coarsened();
+        }
+        if (!box->is_unbalanced()) {
+          box->set_coarsened();
+        }
+      }
     }
     _coarsened_locks.append(locks_list);
   }
@@ -4890,6 +4910,38 @@ bool Compile::coarsened_locks_consistent() {
   return true;
 }
 
+// Mark locking regions (identified by BoxLockNode) as unbalanced if
+// locks coarsening optimization removed Lock/Unlock nodes from them.
+// Such regions become unbalanced because coarsening only removes part
+// of Lock/Unlock nodes in region. As result we can't execute other
+// locks elimination optimizations which assume all code paths have
+// corresponding pair of Lock/Unlock nodes - they are balanced.
+void Compile::mark_unbalanced_boxes() const {
+  int count = coarsened_count();
+  for (int i = 0; i < count; i++) {
+    Node_List* locks_list = _coarsened_locks.at(i);
+    uint size = locks_list->size();
+    if (size > 0) {
+      AbstractLockNode* alock = locks_list->at(0)->as_AbstractLock();
+      BoxLockNode* box = alock->box_node()->as_BoxLock();
+      if (alock->is_coarsened()) {
+        // coarsened_locks_consistent(), which is called before this method, verifies
+        // that the rest of Lock/Unlock nodes on locks_list are also coarsened.
+        assert(!box->is_eliminated(), "regions with coarsened locks should not be marked as eliminated");
+        for (uint j = 1; j < size; j++) {
+          assert(locks_list->at(j)->as_AbstractLock()->is_coarsened(), "only coarsened locks are expected here");
+          BoxLockNode* this_box = locks_list->at(j)->as_AbstractLock()->box_node()->as_BoxLock();
+          if (box != this_box) {
+            assert(!this_box->is_eliminated(), "regions with coarsened locks should not be marked as eliminated");
+            box->set_unbalanced();
+            this_box->set_unbalanced();
+          }
+        }
+      }
+    }
+  }
+}
+
 /**
  * Remove the speculative part of types and clean up the graph
  */
@@ -4909,7 +4961,7 @@ void Compile::remove_speculative_types(PhaseIterGVN &igvn) {
         const Type* t_no_spec = t->remove_speculative();
         if (t_no_spec != t) {
           bool in_hash = igvn.hash_delete(n);
-          assert(in_hash, "node should be in igvn hash table");
+          assert(in_hash || n->hash() == Node::NO_HASH, "node should be in igvn hash table");
           tn->set_type(t_no_spec);
           igvn.hash_insert(n);
           igvn._worklist.push(n); // give it a chance to go away

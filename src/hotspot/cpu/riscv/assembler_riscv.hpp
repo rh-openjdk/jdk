@@ -1772,9 +1772,11 @@ enum Nf {
 
   // Vector unordered indexed load instructions
   INSN(vluxei32_v, 0b0000111, 0b110, 0b01, 0b0);
+  INSN(vluxei64_v, 0b0000111, 0b111, 0b01, 0b0);
 
   // Vector unordered indexed store instructions
   INSN(vsuxei32_v, 0b0100111, 0b110, 0b01, 0b0);
+  INSN(vsuxei64_v, 0b0100111, 0b111, 0b01, 0b0);
 
 #undef INSN
 
@@ -2911,7 +2913,7 @@ public:
   static const unsigned long branch_range = 1 * M;
 
   static bool reachable_from_branch_at(address branch, address target) {
-    return uabs(target - branch) < branch_range;
+    return g_uabs(target - branch) < branch_range;
   }
 
   // Decode the given instruction, checking if it's a 16-bit compressed

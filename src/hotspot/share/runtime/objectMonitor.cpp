@@ -53,6 +53,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "services/threadService.hpp"
 #include "utilities/dtrace.hpp"
+#include "utilities/globalCounter.inline.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/preserveException.hpp"
 #if INCLUDE_JFR
@@ -509,16 +510,6 @@ bool ObjectMonitor::deflate_monitor() {
     return false;
   }
 
-  if (ObjectSynchronizer::is_final_audit() && owner_is_DEFLATER_MARKER()) {
-    // The final audit can see an already deflated ObjectMonitor on the
-    // in-use list because MonitorList::unlink_deflated() might have
-    // blocked for the final safepoint before unlinking all the deflated
-    // monitors.
-    assert(contentions() < 0, "must be negative: contentions=%d", contentions());
-    // Already returned 'true' when it was originally deflated.
-    return false;
-  }
-
   const oop obj = object_peek();
 
   if (obj == nullptr) {
@@ -838,9 +829,9 @@ void ObjectMonitor::EnterI(JavaThread* current) {
     // That is by design - we trade "lossy" counters which are exposed to
     // races during updates for a lower probe effect.
 
-    // This PerfData object can be used in parallel with a safepoint.
-    // See the work around in PerfDataManager::destroy().
-    OM_PERFDATA_OP(FutileWakeups, inc());
+    // We are in safepoint safe state, so shutdown can remove the counter
+    // under our feet. Make sure we make this access safely.
+    OM_PERFDATA_SAFE_OP(FutileWakeups, inc());
     ++nWakeups;
 
     // Assuming this is not a spurious wakeup we'll normally find _succ == current.
@@ -981,8 +972,6 @@ void ObjectMonitor::ReenterI(JavaThread* current, ObjectWaiter* currentNode) {
     // *must* retry  _owner before parking.
     OrderAccess::fence();
 
-    // This PerfData object can be used in parallel with a safepoint.
-    // See the work around in PerfDataManager::destroy().
     OM_PERFDATA_OP(FutileWakeups, inc());
   }
 

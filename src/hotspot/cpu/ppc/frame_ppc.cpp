@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2000, 2023, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2012, 2023 SAP SE. All rights reserved.
+ * Copyright (c) 2000, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025 SAP SE. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -117,9 +117,9 @@ bool frame::safe_for_sender(JavaThread *thread) {
       return false;
     }
 
-    common_abi* sender_abi = (common_abi*) fp;
+    volatile common_abi* sender_abi = (common_abi*) fp; // May get updated concurrently by deoptimization!
     intptr_t* sender_sp = (intptr_t*) fp;
-    address   sender_pc = (address) sender_abi->lr;;
+    address   sender_pc = (address) sender_abi->lr;
 
     if (Continuation::is_return_barrier_entry(sender_pc)) {
       // If our sender_pc is the return barrier, then our "real" sender is the continuation entry
@@ -134,9 +134,18 @@ bool frame::safe_for_sender(JavaThread *thread) {
       return false;
     }
 
+    intptr_t* unextended_sender_sp = is_interpreted_frame() ? interpreter_frame_sender_sp() : sender_sp;
+
+    // If the sender is a deoptimized nmethod we need to check if the original pc is valid.
+    nmethod* sender_nm = sender_blob->as_nmethod_or_null();
+    if (sender_nm != nullptr && sender_nm->is_deopt_pc(sender_pc)) {
+      address orig_pc = *(address*)((address)unextended_sender_sp + sender_nm->orig_pc_offset());
+      if (!sender_nm->insts_contains_inclusive(orig_pc)) return false;
+    }
+
     // It should be safe to construct the sender though it might not be valid.
 
-    frame sender(sender_sp, sender_pc);
+    frame sender(sender_sp, sender_pc, unextended_sender_sp, nullptr /* fp */, sender_blob);
 
     // Do we have a valid fp?
     address sender_fp = (address) sender.fp();
@@ -179,6 +188,15 @@ bool frame::safe_for_sender(JavaThread *thread) {
   // linkages it must be safe
 
   if (!fp_safe) {
+    return false;
+  }
+
+  if (sender_pc() == nullptr) {
+    // Likely the return pc was not yet stored to stack. We rather discard this
+    // sample also because we would hit an assertion in frame::setup(). We can
+    // find any other random value if the return pc was not yet stored to
+    // stack. We rely on consistency checks to handle this (see
+    // e.g. find_initial_Java_frame())
     return false;
   }
 

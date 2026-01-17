@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2021, 2022, Red Hat, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -698,7 +699,7 @@ void ShenandoahEvacUpdateCleanupOopStorageRootsClosure::do_oop(oop* p) {
   const oop obj = RawAccess<>::oop_load(p);
   if (!CompressedOops::is_null(obj)) {
     if (!_mark_context->is_marked(obj)) {
-      shenandoah_assert_correct(p, obj);
+      // Note: The obj is dead here. Do not touch it, just clear.
       ShenandoahHeap::atomic_clear_oop(p, obj);
     } else if (_evac_in_progress && _heap->in_collection_set(obj)) {
       oop resolved = ShenandoahBarrierSet::resolve_forwarded_not_null(obj);
@@ -749,18 +750,9 @@ public:
     _vm_roots(phase),
     _cld_roots(phase, ShenandoahHeap::heap()->workers()->active_workers(), false /*heap iteration*/),
     _nmethod_itr(ShenandoahCodeRoots::table()),
-    _phase(phase) {
-    if (ShenandoahHeap::heap()->unload_classes()) {
-      MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-      _nmethod_itr.nmethods_do_begin();
-    }
-  }
+    _phase(phase) {}
 
   ~ShenandoahConcurrentWeakRootsEvacUpdateTask() {
-    if (ShenandoahHeap::heap()->unload_classes()) {
-      MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-      _nmethod_itr.nmethods_do_end();
-    }
     // Notify runtime data structures of potentially dead oops
     _vm_roots.report_num_dead();
   }
@@ -814,7 +806,7 @@ void ShenandoahConcurrentGC::op_weak_roots() {
   // Perform handshake to flush out dead oops
   {
     ShenandoahTimingsTracker t(ShenandoahPhaseTimings::conc_weak_roots_rendezvous);
-    heap->rendezvous_threads();
+    heap->rendezvous_threads("Shenandoah Concurrent Weak Roots");
   }
 }
 
@@ -862,19 +854,7 @@ public:
     _phase(phase),
     _vm_roots(phase),
     _cld_roots(phase, ShenandoahHeap::heap()->workers()->active_workers(), false /*heap iteration*/),
-    _nmethod_itr(ShenandoahCodeRoots::table()) {
-    if (!ShenandoahHeap::heap()->unload_classes()) {
-      MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-      _nmethod_itr.nmethods_do_begin();
-    }
-  }
-
-  ~ShenandoahConcurrentRootsEvacUpdateTask() {
-    if (!ShenandoahHeap::heap()->unload_classes()) {
-      MutexLocker mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-      _nmethod_itr.nmethods_do_end();
-    }
-  }
+    _nmethod_itr(ShenandoahCodeRoots::table()) {}
 
   void work(uint worker_id) {
     ShenandoahConcurrentWorkerSession worker_session(worker_id);

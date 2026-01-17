@@ -26,6 +26,7 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#include "compiler/disassembler.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/tlab_globals.hpp"
@@ -46,7 +47,7 @@
 #include "runtime/synchronizer.hpp"
 #include "utilities/powerOfTwo.hpp"
 
-#define __ _masm->
+#define __ Disassembler::hook<InterpreterMacroAssembler>(__FILE__, __LINE__, _masm)->
 
 // Address computation: local variables
 
@@ -122,24 +123,6 @@ static inline Address at_tos_p5() {
   return Address(esp, Interpreter::expr_offset_in_bytes(5));
 }
 
-// Miscellaneous helper routines
-// Store an oop (or null) at the Address described by obj.
-// If val == noreg this means store a null
-static void do_oop_store(InterpreterMacroAssembler* _masm,
-                         Address dst,
-                         Register val,
-                         DecoratorSet decorators) {
-  assert(val == noreg || val == x10, "parameter is just for looks");
-  __ store_heap_oop(dst, val, x28, x29, x13, decorators);
-}
-
-static void do_oop_load(InterpreterMacroAssembler* _masm,
-                        Address src,
-                        Register dst,
-                        DecoratorSet decorators) {
-  __ load_heap_oop(dst, src, x28, x29, decorators);
-}
-
 Address TemplateTable::at_bcp(int offset) {
   assert(_desc->uses_bcp(), "inconsistent uses_bcp information");
   return Address(xbcp, offset);
@@ -148,6 +131,7 @@ Address TemplateTable::at_bcp(int offset) {
 void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
                                    Register temp_reg, bool load_bc_into_bc_reg /*=true*/,
                                    int byte_no) {
+  assert_different_registers(bc_reg, temp_reg);
   if (!RewriteBytecodes) { return; }
   Label L_patch_done;
 
@@ -203,7 +187,11 @@ void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
   __ bind(L_okay);
 #endif
 
-  // patch bytecode
+  // Patch bytecode with release store to coordinate with ResolvedFieldEntry loads
+  // in fast bytecode codelets. load_field_entry has a memory barrier that gains
+  // the needed ordering, together with control dependency on entering the fast codelet
+  // itself.
+  __ membar(MacroAssembler::LoadStore | MacroAssembler::StoreStore);
   __ sb(bc_reg, at_bcp(0));
   __ bind(L_patch_done);
 }
@@ -308,7 +296,6 @@ void TemplateTable::ldc(LdcType type) {
   // get type
   __ addi(x13, x11, tags_offset);
   __ add(x13, x10, x13);
-  __ membar(MacroAssembler::AnyAny);
   __ lbu(x13, Address(x13, 0));
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
 
@@ -770,7 +757,7 @@ void TemplateTable::aaload() {
   index_check(x10, x11); // leaves index in x11
   __ add(x11, x11, arrayOopDesc::base_offset_in_bytes(T_OBJECT) >> LogBytesPerHeapOop);
   __ shadd(x10, x11, x10, t0, LogBytesPerHeapOop);
-  do_oop_load(_masm, Address(x10), x10, IS_ARRAY);
+  __ load_heap_oop(x10, Address(x10), x28, x29, IS_ARRAY);
 }
 
 void TemplateTable::baload() {
@@ -1082,7 +1069,7 @@ void TemplateTable::aastore() {
   // Get the value we will store
   __ ld(x10, at_tos());
   // Now store using the appropriate barrier
-  do_oop_store(_masm, element_address, x10, IS_ARRAY);
+  __ store_heap_oop(element_address, x10, x28, x29, x13, IS_ARRAY);
   __ j(done);
 
   // Have a null in x10, x13=array, x12=index.  Store null at ary[idx]
@@ -1090,7 +1077,7 @@ void TemplateTable::aastore() {
   __ profile_null_seen(x12);
 
   // Store a null
-  do_oop_store(_masm, element_address, noreg, IS_ARRAY);
+  __ store_heap_oop(element_address, noreg, x28, x29, x13, IS_ARRAY);
 
   // Pop stack arguments
   __ bind(done);
@@ -2230,7 +2217,6 @@ void TemplateTable::load_invokedynamic_entry(Register method) {
   Label resolved;
 
   __ load_resolved_indy_entry(cache, index);
-  __ membar(MacroAssembler::AnyAny);
   __ ld(method, Address(cache, in_bytes(ResolvedIndyEntry::method_offset())));
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
 
@@ -2245,7 +2231,6 @@ void TemplateTable::load_invokedynamic_entry(Register method) {
   __ call_VM(noreg, entry, method);
   // Update registers with resolved info
   __ load_resolved_indy_entry(cache, index);
-  __ membar(MacroAssembler::AnyAny);
   __ ld(method, Address(cache, in_bytes(ResolvedIndyEntry::method_offset())));
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
 
@@ -2431,7 +2416,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static, RewriteContr
   __ sub(t0, flags, (u1)atos);
   __ bnez(t0, notObj);
   // atos
-  do_oop_load(_masm, field, x10, IN_HEAP);
+  __ load_heap_oop(x10, field, x28, x29, IN_HEAP);
   __ push(atos);
   if (rc == may_rewrite) {
     patch_bytecode(Bytecodes::_fast_agetfield, bc, x11);
@@ -2691,7 +2676,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
     __ add(off, obj, off); // if static, obj from cache, else obj from stack.
     const Address field(off, 0);
     // Store into the field
-    do_oop_store(_masm, field, x10, IN_HEAP);
+    __ store_heap_oop(field, x10, x28, x29, x13, IN_HEAP);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_aputfield, bc, x11, true, byte_no);
     }
@@ -2928,6 +2913,7 @@ void TemplateTable::fast_storefield(TosState state) {
 
   // replace index with field offset from cache entry
   __ ld(x11, Address(x12, in_bytes(base + ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(x11);
 
   {
     Label notVolatile;
@@ -2944,10 +2930,10 @@ void TemplateTable::fast_storefield(TosState state) {
   __ add(x11, x12, x11);
   const Address field(x11, 0);
 
-  // access field
+  // access field, must not clobber x13 - flags
   switch (bytecode()) {
     case Bytecodes::_fast_aputfield:
-      do_oop_store(_masm, field, x10, IN_HEAP);
+      __ store_heap_oop(field, x10, x28, x29, x15, IN_HEAP);
       break;
     case Bytecodes::_fast_lputfield:
       __ access_store_at(T_LONG, IN_HEAP, field, x10, noreg, noreg, noreg);
@@ -3023,6 +3009,8 @@ void TemplateTable::fast_accessfield(TosState state) {
 
   __ ld(x11, Address(x12, in_bytes(ConstantPoolCache::base_offset() +
                                    ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(x11);
+
   __ lwu(x13, Address(x12, in_bytes(ConstantPoolCache::base_offset() +
                                     ConstantPoolCacheEntry::flags_offset())));
 
@@ -3035,7 +3023,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   // access field
   switch (bytecode()) {
     case Bytecodes::_fast_agetfield:
-      do_oop_load(_masm, field, x10, IN_HEAP);
+      __ load_heap_oop(x10, field, x28, x29, IN_HEAP);
       __ verify_oop(x10);
       break;
     case Bytecodes::_fast_lgetfield:
@@ -3079,8 +3067,13 @@ void TemplateTable::fast_xaccess(TosState state) {
   __ ld(x10, aaddress(0));
   // access constant pool cache
   __ get_cache_and_index_at_bcp(x12, x13, 2);
+
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   __ ld(x11, Address(x12, in_bytes(ConstantPoolCache::base_offset() +
                                    ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(x11);
 
   // make sure exception is reported in correct bcp range (getfield is
   // next instruction)
@@ -3094,7 +3087,7 @@ void TemplateTable::fast_xaccess(TosState state) {
       break;
     case atos:
       __ add(x10, x10, x11);
-      do_oop_load(_masm, Address(x10, 0), x10, IN_HEAP);
+      __ load_heap_oop(x10, Address(x10, 0), x28, x29, IN_HEAP);
       __ verify_oop(x10);
       break;
     case ftos:
@@ -3452,7 +3445,6 @@ void TemplateTable::_new() {
   const int tags_offset = Array<u1>::base_offset_in_bytes();
   __ add(t0, x10, x13);
   __ la(t0, Address(t0, tags_offset));
-  __ membar(MacroAssembler::AnyAny);
   __ lbu(t0, t0);
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
   __ sub(t1, t0, (u1)JVM_CONSTANT_Class);
@@ -3572,7 +3564,6 @@ void TemplateTable::checkcast() {
   // See if bytecode has already been quicked
   __ add(t0, x13, Array<u1>::base_offset_in_bytes());
   __ add(x11, t0, x9);
-  __ membar(MacroAssembler::AnyAny);
   __ lbu(x11, x11);
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
   __ sub(t0, x11, (u1)JVM_CONSTANT_Class);
@@ -3628,7 +3619,6 @@ void TemplateTable::instanceof() {
   // See if bytecode has already been quicked
   __ add(t0, x13, Array<u1>::base_offset_in_bytes());
   __ add(x11, t0, x9);
-  __ membar(MacroAssembler::AnyAny);
   __ lbu(x11, x11);
   __ membar(MacroAssembler::LoadLoad | MacroAssembler::LoadStore);
   __ sub(t0, x11, (u1)JVM_CONSTANT_Class);

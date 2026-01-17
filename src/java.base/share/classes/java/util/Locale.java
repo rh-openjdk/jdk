@@ -50,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.spi.LocaleNameProvider;
 import java.util.stream.Stream;
 
+import jdk.internal.util.StaticProperty;
 import jdk.internal.vm.annotation.Stable;
 
 import sun.security.action.GetPropertyAction;
@@ -1052,47 +1053,23 @@ public final class Locale implements Cloneable, Serializable {
     }
 
     private static Locale initDefault() {
-        String language, region, script, country, variant;
-        Properties props = GetPropertyAction.privilegedGetProperties();
-        language = props.getProperty("user.language", "en");
-        // for compatibility, check for old user.region property
-        region = props.getProperty("user.region");
-        if (region != null) {
-            // region can be of form country, country_variant, or _variant
-            int i = region.indexOf('_');
-            if (i >= 0) {
-                country = region.substring(0, i);
-                variant = region.substring(i + 1);
-            } else {
-                country = region;
-                variant = "";
-            }
-            script = "";
-        } else {
-            script = props.getProperty("user.script", "");
-            country = props.getProperty("user.country", "");
-            variant = props.getProperty("user.variant", "");
-        }
-
-        return getInstance(language, script, country, variant,
-                getDefaultExtensions(props.getProperty("user.extensions", ""))
+        return getInstance(
+                StaticProperty.USER_LANGUAGE,
+                StaticProperty.USER_SCRIPT,
+                StaticProperty.USER_COUNTRY,
+                StaticProperty.USER_VARIANT,
+                getDefaultExtensions(StaticProperty.USER_EXTENSIONS)
                     .orElse(null));
     }
 
     private static Locale initDefault(Locale.Category category) {
-        Properties props = GetPropertyAction.privilegedGetProperties();
-
         Locale locale = Locale.defaultLocale;
         return getInstance(
-            props.getProperty(category.languageKey,
-                    locale.getLanguage()),
-            props.getProperty(category.scriptKey,
-                    locale.getScript()),
-            props.getProperty(category.countryKey,
-                    locale.getCountry()),
-            props.getProperty(category.variantKey,
-                    locale.getVariant()),
-            getDefaultExtensions(props.getProperty(category.extensionsKey, ""))
+            category == Category.DISPLAY ? StaticProperty.USER_LANGUAGE_DISPLAY : StaticProperty.USER_LANGUAGE_FORMAT,
+            category == Category.DISPLAY ? StaticProperty.USER_SCRIPT_DISPLAY : StaticProperty.USER_SCRIPT_FORMAT,
+            category == Category.DISPLAY ? StaticProperty.USER_COUNTRY_DISPLAY : StaticProperty.USER_COUNTRY_FORMAT,
+            category == Category.DISPLAY ? StaticProperty.USER_VARIANT_DISPLAY : StaticProperty.USER_VARIANT_FORMAT,
+            getDefaultExtensions(category == Category.DISPLAY ? StaticProperty.USER_EXTENSIONS_DISPLAY : StaticProperty.USER_EXTENSIONS_FORMAT)
                 .orElse(locale.getLocaleExtensions()));
     }
 

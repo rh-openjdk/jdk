@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#include "compiler/disassembler.hpp"
 #include "compiler/compilerDefinitions.inline.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
 #include "gc/shared/collectedHeap.hpp"
@@ -46,7 +47,7 @@
 #include "runtime/synchronizer.hpp"
 #include "utilities/powerOfTwo.hpp"
 
-#define __ _masm->
+#define __ Disassembler::hook<InterpreterMacroAssembler>(__FILE__, __LINE__, _masm)->
 
 // Address computation: local variables
 
@@ -165,6 +166,7 @@ void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
                                    Register temp_reg, bool load_bc_into_bc_reg/*=true*/,
                                    int byte_no)
 {
+  assert_different_registers(bc_reg, temp_reg);
   if (!RewriteBytecodes)  return;
   Label L_patch_done;
 
@@ -222,8 +224,12 @@ void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
   __ bind(L_okay);
 #endif
 
-  // patch bytecode
-  __ strb(bc_reg, at_bcp(0));
+  // Patch bytecode with release store to coordinate with ConstantPoolCacheEntry loads
+  // in fast bytecode codelets. The fast bytecode codelets have a memory barrier that gains
+  // the needed ordering, together with control dependency on entering the fast codelet
+  // itself.
+  __ lea(temp_reg, at_bcp(0));
+  __ stlrb(bc_reg, temp_reg);
   __ bind(L_patch_done);
 }
 
@@ -1134,6 +1140,7 @@ void TemplateTable::aastore() {
   // Get the value we will store
   __ ldr(r0, at_tos());
   // Now store using the appropriate barrier
+  // Clobbers: r10, r11, r3
   do_oop_store(_masm, element_address, r0, IS_ARRAY);
   __ b(done);
 
@@ -1142,6 +1149,7 @@ void TemplateTable::aastore() {
   __ profile_null_seen(r2);
 
   // Store a null
+  // Clobbers: r10, r11, r3
   do_oop_store(_masm, element_address, noreg, IS_ARRAY);
 
   // Pop stack arguments
@@ -2773,6 +2781,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
     __ pop(atos);
     if (!is_static) pop_and_check_object(obj);
     // Store into the field
+    // Clobbers: r10, r11, r3
     do_oop_store(_masm, field, r0, IN_HEAP);
     if (rc == may_rewrite) {
       patch_bytecode(Bytecodes::_fast_aputfield, bc, r1, true, byte_no);
@@ -2972,16 +2981,17 @@ void TemplateTable::fast_storefield(TosState state)
   // Must prevent reordering of the following cp cache loads with bytecode load
   __ membar(MacroAssembler::LoadLoad);
 
-  // test for volatile with r3
-  __ ldrw(r3, Address(r2, in_bytes(base +
+  // test for volatile with r5
+  __ ldrw(r5, Address(r2, in_bytes(base +
                                    ConstantPoolCacheEntry::flags_offset())));
 
   // replace index with field offset from cache entry
   __ ldr(r1, Address(r2, in_bytes(base + ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(r1);
 
   {
     Label notVolatile;
-    __ tbz(r3, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
+    __ tbz(r5, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
     __ membar(MacroAssembler::StoreStore | MacroAssembler::LoadStore);
     __ bind(notVolatile);
   }
@@ -2997,6 +3007,7 @@ void TemplateTable::fast_storefield(TosState state)
   // access field
   switch (bytecode()) {
   case Bytecodes::_fast_aputfield:
+    // Clobbers: r10, r11, r3
     do_oop_store(_masm, field, r0, IN_HEAP);
     break;
   case Bytecodes::_fast_lputfield:
@@ -3029,7 +3040,7 @@ void TemplateTable::fast_storefield(TosState state)
 
   {
     Label notVolatile;
-    __ tbz(r3, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
+    __ tbz(r5, ConstantPoolCacheEntry::is_volatile_shift, notVolatile);
     __ membar(MacroAssembler::StoreLoad | MacroAssembler::StoreStore);
     __ bind(notVolatile);
   }
@@ -3070,6 +3081,8 @@ void TemplateTable::fast_accessfield(TosState state)
 
   __ ldr(r1, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(r1);
+
   __ ldrw(r3, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                    ConstantPoolCacheEntry::flags_offset())));
 
@@ -3137,8 +3150,13 @@ void TemplateTable::fast_xaccess(TosState state)
   __ ldr(r0, aaddress(0));
   // access constant pool cache
   __ get_cache_and_index_at_bcp(r2, r3, 2);
+
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   __ ldr(r1, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
+  __ verify_field_offset(r1);
 
   // 8179954: We need to make sure that the code generated for
   // volatile accesses forms a sequentially-consistent set of

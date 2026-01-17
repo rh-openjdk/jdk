@@ -701,14 +701,24 @@ SafePointNode* PhaseIdealLoop::find_safepoint(Node* back_control, Node* x, Ideal
 
     // We can only use that safepoint if there's no side effect between the backedge and the safepoint.
 
-    // mm is used for book keeping
+    // mm is the memory state at the safepoint (when it's a MergeMem)
+    // no_side_effect_since_safepoint() goes over the memory state at the backedge. It resets the mm input for each
+    // component of the memory state it encounters so it points to the base memory. Once no_side_effect_since_safepoint()
+    // is done, if no side effect after the safepoint was found, mm should transform to the base memory: the states at
+    // the backedge and safepoint are the same so all components of the memory state at the safepoint should have been
+    // reset.
     MergeMemNode* mm = nullptr;
 #ifdef ASSERT
     if (mem->is_MergeMem()) {
       mm = mem->clone()->as_MergeMem();
       _igvn._worklist.push(mm);
       for (MergeMemStream mms(mem->as_MergeMem()); mms.next_non_empty(); ) {
-        if (mms.alias_idx() != Compile::AliasIdxBot && loop != get_loop(ctrl_or_self(mms.memory()))) {
+        // Loop invariant memory state won't be reset by no_side_effect_since_safepoint(). Do it here.
+        // Escape Analysis can add state to mm that it doesn't add to the backedge memory Phis, breaking verification
+        // code that relies on mm. Clear that extra state here.
+        if (mms.alias_idx() != Compile::AliasIdxBot &&
+            (loop != get_loop(ctrl_or_self(mms.memory())) ||
+             (mms.adr_type()->isa_oop_ptr() && mms.adr_type()->is_known_instance()))) {
           mm->set_memory_at(mms.alias_idx(), mem->as_MergeMem()->base_memory());
         }
       }
@@ -801,13 +811,14 @@ bool PhaseIdealLoop::create_loop_nest(IdealLoopTree* loop, Node_List &old_new) {
   }
 #endif
 
-  jlong stride_con = head->stride_con();
-  assert(stride_con != 0, "missed some peephole opt");
+  jlong stride_con_long = head->stride_con();
+  assert(stride_con_long != 0, "missed some peephole opt");
   // We can't iterate for more than max int at a time.
-  if (stride_con != (jint)stride_con) {
+  if (stride_con_long != (jint)stride_con_long || stride_con_long == min_jint) {
     assert(bt == T_LONG, "only for long loops");
     return false;
   }
+  jint stride_con = checked_cast<jint>(stride_con_long);
   // The number of iterations for the integer count loop: guarantee no
   // overflow: max_jint - stride_con max. -1 so there's no need for a
   // loop limit check if the exit test is <= or >=.
@@ -927,11 +938,19 @@ bool PhaseIdealLoop::create_loop_nest(IdealLoopTree* loop, Node_List &old_new) {
   // inner_iters_max may not fit in a signed integer (iterating from
   // Long.MIN_VALUE to Long.MAX_VALUE for instance). Use an unsigned
   // min.
-  Node* inner_iters_actual = MaxNode::unsigned_min(inner_iters_max, inner_iters_limit, TypeInteger::make(0, iters_limit, Type::WidenMin, bt), _igvn);
+  const TypeInteger* inner_iters_actual_range = TypeInteger::make(0, iters_limit, Type::WidenMin, bt);
+  Node* inner_iters_actual = MaxNode::unsigned_min(inner_iters_max, inner_iters_limit, inner_iters_actual_range, _igvn);
 
   Node* inner_iters_actual_int;
   if (bt == T_LONG) {
     inner_iters_actual_int = new ConvL2INode(inner_iters_actual);
+    _igvn.register_new_node_with_optimizer(inner_iters_actual_int);
+    // When the inner loop is transformed to a counted loop, a loop limit check is not expected to be needed because
+    // the loop limit is less or equal to max_jint - stride - 1 (if stride is positive but a similar argument exists for
+    // a negative stride). We add a CastII here to guarantee that, when the counted loop is created in a subsequent loop
+    // opts pass, an accurate range of values for the limits is found.
+    const TypeInt* inner_iters_actual_int_range = TypeInt::make(0, iters_limit, Type::WidenMin);
+    inner_iters_actual_int = new CastIINode(outer_head, inner_iters_actual_int, inner_iters_actual_int_range, ConstraintCastNode::UnconditionalDependency);
     _igvn.register_new_node_with_optimizer(inner_iters_actual_int);
   } else {
     inner_iters_actual_int = inner_iters_actual;
@@ -945,7 +964,7 @@ bool PhaseIdealLoop::create_loop_nest(IdealLoopTree* loop, Node_List &old_new) {
   }
 
   // Clone the iv data nodes as an integer iv
-  Node* int_stride = _igvn.intcon(checked_cast<int>(stride_con));
+  Node* int_stride = _igvn.intcon(stride_con);
   set_ctrl(int_stride, C->root());
   Node* inner_phi = new PhiNode(x->in(0), TypeInt::INT);
   Node* inner_incr = new AddINode(inner_phi, int_stride);
@@ -1040,7 +1059,7 @@ bool PhaseIdealLoop::create_loop_nest(IdealLoopTree* loop, Node_List &old_new) {
     register_new_node(outer_phi, outer_head);
   }
 
-  transform_long_range_checks(checked_cast<int>(stride_con), range_checks, outer_phi, inner_iters_actual_int,
+  transform_long_range_checks(stride_con, range_checks, outer_phi, inner_iters_actual_int,
                               inner_phi, iv_add, inner_head);
   // Peel one iteration of the loop and use the safepoint at the end
   // of the peeled iteration to insert Parse Predicates. If no well
@@ -1077,7 +1096,7 @@ bool PhaseIdealLoop::create_loop_nest(IdealLoopTree* loop, Node_List &old_new) {
   return true;
 }
 
-int PhaseIdealLoop::extract_long_range_checks(const IdealLoopTree* loop, jlong stride_con, int iters_limit, PhiNode* phi,
+int PhaseIdealLoop::extract_long_range_checks(const IdealLoopTree* loop, jint stride_con, int iters_limit, PhiNode* phi,
                                               Node_List& range_checks) {
   const jlong min_iters = 2;
   jlong reduced_iters_limit = iters_limit;
@@ -1093,7 +1112,9 @@ int PhaseIdealLoop::extract_long_range_checks(const IdealLoopTree* loop, jlong s
         jlong scale = 0;
         if (loop->is_range_check_if(if_proj, this, T_LONG, phi, range, offset, scale) &&
             loop->is_invariant(range) && loop->is_invariant(offset) &&
-            original_iters_limit / ABS(scale * stride_con) >= min_iters) {
+            scale != min_jlong &&
+            original_iters_limit / ABS(scale) >= min_iters * ABS(stride_con)) {
+          assert(scale == (jint)scale, "scale should be an int");
           reduced_iters_limit = MIN2(reduced_iters_limit, original_iters_limit/ABS(scale));
           range_checks.push(c);
         }
@@ -1879,11 +1900,27 @@ bool PhaseIdealLoop::is_counted_loop(Node* x, IdealLoopTree*&loop, BasicType iv_
   //     Since stride > 0 and limit_correction <= stride + 1, we can restate this with no over- or underflow into:
   //         max_int - canonicalized_correction - limit_correction >= limit
   //     Since canonicalized_correction and limit_correction are both constants, we can replace them with a new constant:
-  //         final_correction = canonicalized_correction + limit_correction
+  //         (v) final_correction = canonicalized_correction + limit_correction
+  //
   //     which gives us:
   //
   //     Final predicate condition:
   //         max_int - final_correction >= limit
+  //
+  //     However, we need to be careful that (v) does not over- or underflow.
+  //     We know that:
+  //         canonicalized_correction = stride - 1
+  //     and
+  //         limit_correction <= stride + 1
+  //     and thus
+  //         canonicalized_correction + limit_correction <= 2 * stride
+  //     To prevent an over- or underflow of (v), we must ensure that
+  //         2 * stride <= max_int
+  //     which can safely be checked without over- or underflow with
+  //         (vi) stride != min_int AND abs(stride) <= max_int / 2
+  //
+  //     We could try to further optimize the cases where (vi) does not hold but given that such large strides are
+  //     very uncommon and the loop would only run for a very few iterations anyway, we simply bail out if (vi) fails.
   //
   // (2) Loop Limit Check Predicate for (ii):
   //     Using (ii): init < limit
@@ -1915,6 +1952,10 @@ bool PhaseIdealLoop::is_counted_loop(Node* x, IdealLoopTree*&loop, BasicType iv_
   //            there is no overflow of the iv phi after the first iteration. In this case, we don't need to check (ii)
   //            again and can skip the predicate.
 
+  // Check (vi) and bail out if the stride is too big.
+  if (stride_con == min_signed_integer(iv_bt) || (ABS(stride_con) > max_signed_integer(iv_bt) / 2)) {
+    return false;
+  }
 
   // Accounting for (LE3) and (LE4) where we use pre-incremented phis in the loop exit check.
   const jlong limit_correction_for_pre_iv_exit_check = (phi_incr != nullptr) ? stride_con : 0;
@@ -2311,7 +2352,8 @@ Node* PhaseIdealLoop::exact_limit( IdealLoopTree *loop ) {
   CountedLoopNode *cl = loop->_head->as_CountedLoop();
   assert(cl->is_valid_counted_loop(T_INT), "");
 
-  if (ABS(cl->stride_con()) == 1 ||
+  if (cl->stride_con() == 1 ||
+      cl->stride_con() == -1 ||
       cl->limit()->Opcode() == Op_LoopLimit) {
     // Old code has exact limit (it could be incorrect in case of int overflow).
     // Loop limit is exact with stride == 1. And loop may already have exact limit.
@@ -2529,7 +2571,7 @@ Node *LoopLimitNode::Ideal(PhaseGVN *phase, bool can_reshape) {
 
   const TypeInt* init_t  = phase->type(in(Init) )->is_int();
   const TypeInt* limit_t = phase->type(in(Limit))->is_int();
-  int stride_p;
+  jlong stride_p;
   jlong lim, ini;
   julong max;
   if (stride_con > 0) {
@@ -2538,10 +2580,10 @@ Node *LoopLimitNode::Ideal(PhaseGVN *phase, bool can_reshape) {
     ini = init_t->_lo;
     max = (julong)max_jint;
   } else {
-    stride_p = -stride_con;
+    stride_p = -(jlong)stride_con;
     lim = init_t->_hi;
     ini = limit_t->_lo;
-    max = (julong)min_jint;
+    max = (julong)(juint)min_jint; // double cast to get 0x0000000080000000, not 0xffffffff80000000
   }
   julong range = lim - ini + stride_p;
   if (range <= max) {
@@ -2948,14 +2990,22 @@ void OuterStripMinedLoopNode::adjust_strip_mined_loop(PhaseIterGVN* igvn) {
   CountedLoopEndNode* inner_cle = inner_cl->loopexit();
 
   int stride = inner_cl->stride_con();
-  jlong scaled_iters_long = ((jlong)LoopStripMiningIter) * ABS(stride);
+  // For a min int stride, LoopStripMiningIter * stride overflows the int range for all values of LoopStripMiningIter
+  // except 0 or 1. Those values are handled early on in this method and causes the method to return. So for a min int
+  // stride, the method is guaranteed to return at the next check below.
+  jlong scaled_iters_long = ((jlong)LoopStripMiningIter) * ABS((jlong)stride);
   int scaled_iters = (int)scaled_iters_long;
-  int short_scaled_iters = LoopStripMiningIterShortLoop* ABS(stride);
+  if ((jlong)scaled_iters != scaled_iters_long) {
+    // Remove outer loop and safepoint (too few iterations)
+    remove_outer_loop_and_safepoint(igvn);
+    return;
+  }
+  jlong short_scaled_iters = LoopStripMiningIterShortLoop * ABS(stride);
   const TypeInt* inner_iv_t = igvn->type(inner_iv_phi)->is_int();
   jlong iter_estimate = (jlong)inner_iv_t->_hi - (jlong)inner_iv_t->_lo;
   assert(iter_estimate > 0, "broken");
-  if ((jlong)scaled_iters != scaled_iters_long || iter_estimate <= short_scaled_iters) {
-    // Remove outer loop and safepoint (too few iterations)
+  if (iter_estimate <= short_scaled_iters) {
+    // Remove outer loop and safepoint: loop executes less than LoopStripMiningIterShortLoop
     remove_outer_loop_and_safepoint(igvn);
     return;
   }
@@ -4455,23 +4505,6 @@ bool PhaseIdealLoop::process_expensive_nodes() {
   return progress;
 }
 
-#ifdef ASSERT
-// Goes over all children of the root of the loop tree. Check if any of them have a path
-// down to Root, that does not go via a NeverBranch exit.
-bool PhaseIdealLoop::only_has_infinite_loops() {
-  ResourceMark rm;
-  Unique_Node_List worklist;
-  // start traversal at all loop heads of first-level loops
-  for (IdealLoopTree* l = _ltree_root->_child; l != nullptr; l = l->_next) {
-    Node* head = l->_head;
-    assert(head->is_Region(), "");
-    worklist.push(head);
-  }
-  return RegionNode::are_all_nodes_in_infinite_subgraph(worklist);
-}
-#endif
-
-
 //=============================================================================
 //----------------------------build_and_optimize-------------------------------
 // Create a PhaseLoop.  Build the ideal Loop tree.  Map each Ideal Node to
@@ -4530,13 +4563,9 @@ void PhaseIdealLoop::build_and_optimize() {
     return;
   }
 
-  // Verify that the has_loops() flag set at parse time is consistent
-  // with the just built loop tree. With infinite loops, it could be
-  // that one pass of loop opts only finds infinite loops, clears the
-  // has_loops() flag but adds NeverBranch nodes so the next loop opts
-  // verification pass finds a non empty loop tree. When the back edge
+  // Verify that the has_loops() flag set at parse time is consistent with the just built loop tree. When the back edge
   // is an exception edge, parsing doesn't set has_loops().
-  assert(_ltree_root->_child == nullptr || C->has_loops() || only_has_infinite_loops() || C->has_exception_backedge(), "parsing found no loops but there are some");
+  assert(_ltree_root->_child == nullptr || C->has_loops() || C->has_exception_backedge(), "parsing found no loops but there are some");
   // No loops after all
   if( !_ltree_root->_child && !_verify_only ) C->set_has_loops(false);
 
@@ -5388,7 +5417,7 @@ void PhaseIdealLoop::build_loop_tree() {
       if ( bltstack.length() == stack_size ) {
         // There were no additional children, post visit node now
         (void)bltstack.pop(); // Remove node from stack
-        pre_order = build_loop_tree_impl( n, pre_order );
+        pre_order = build_loop_tree_impl(n, pre_order);
         // Check for bailout
         if (C->failing()) {
           return;
@@ -5406,7 +5435,7 @@ void PhaseIdealLoop::build_loop_tree() {
 }
 
 //------------------------------build_loop_tree_impl---------------------------
-int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
+int PhaseIdealLoop::build_loop_tree_impl(Node* n, int pre_order) {
   // ---- Post-pass Work ----
   // Pre-walked but not post-walked nodes need a pre_order number.
 
@@ -5417,56 +5446,51 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
   // for it.  Then find the tightest enclosing loop for the self Node.
   for (DUIterator_Fast imax, i = n->fast_outs(imax); i < imax; i++) {
     Node* m = n->fast_out(i);   // Child
-    if( n == m ) continue;      // Ignore control self-cycles
-    if( !m->is_CFG() ) continue;// Ignore non-CFG edges
+    if (n == m) continue;      // Ignore control self-cycles
+    if (!m->is_CFG()) continue;// Ignore non-CFG edges
 
     IdealLoopTree *l;           // Child's loop
-    if( !is_postvisited(m) ) {  // Child visited but not post-visited?
+    if (!is_postvisited(m)) {  // Child visited but not post-visited?
       // Found a backedge
-      assert( get_preorder(m) < pre_order, "should be backedge" );
+      assert(get_preorder(m) < pre_order, "should be backedge");
       // Check for the RootNode, which is already a LoopNode and is allowed
       // to have multiple "backedges".
-      if( m == C->root()) {     // Found the root?
+      if (m == C->root()) {     // Found the root?
         l = _ltree_root;        // Root is the outermost LoopNode
       } else {                  // Else found a nested loop
         // Insert a LoopNode to mark this loop.
         l = new IdealLoopTree(this, m, n);
       } // End of Else found a nested loop
-      if( !has_loop(m) )        // If 'm' does not already have a loop set
+      if (!has_loop(m)) {        // If 'm' does not already have a loop set
         set_loop(m, l);         // Set loop header to loop now
-
+      }
     } else {                    // Else not a nested loop
       if (!_loop_or_ctrl[m->_idx]) continue; // Dead code has no loop
-      l = get_loop(m);          // Get previously determined loop
+      IdealLoopTree* m_loop = get_loop(m);
+      l = m_loop;          // Get previously determined loop
       // If successor is header of a loop (nest), move up-loop till it
       // is a member of some outer enclosing loop.  Since there are no
       // shared headers (I've split them already) I only need to go up
       // at most 1 level.
-      while( l && l->_head == m ) // Successor heads loop?
+      while (l && l->_head == m) { // Successor heads loop?
         l = l->_parent;         // Move up 1 for me
+      }
       // If this loop is not properly parented, then this loop
       // has no exit path out, i.e. its an infinite loop.
-      if( !l ) {
+      if (!l) {
         // Make loop "reachable" from root so the CFG is reachable.  Basically
         // insert a bogus loop exit that is never taken.  'm', the loop head,
         // points to 'n', one (of possibly many) fall-in paths.  There may be
         // many backedges as well.
 
-        // Here I set the loop to be the root loop.  I could have, after
-        // inserting a bogus loop exit, restarted the recursion and found my
-        // new loop exit.  This would make the infinite loop a first-class
-        // loop and it would then get properly optimized.  What's the use of
-        // optimizing an infinite loop?
-        l = _ltree_root;        // Oops, found infinite loop
-
         if (!_verify_only) {
           // Insert the NeverBranch between 'm' and it's control user.
           NeverBranchNode *iff = new NeverBranchNode( m );
           _igvn.register_new_node_with_optimizer(iff);
-          set_loop(iff, l);
+          set_loop(iff, m_loop);
           Node *if_t = new CProjNode( iff, 0 );
           _igvn.register_new_node_with_optimizer(if_t);
-          set_loop(if_t, l);
+          set_loop(if_t, m_loop);
 
           Node* cfg = nullptr;       // Find the One True Control User of m
           for (DUIterator_Fast jmax, j = m->fast_outs(jmax); j < jmax; j++) {
@@ -5482,7 +5506,7 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
           // Now create the never-taken loop exit
           Node *if_f = new CProjNode( iff, 1 );
           _igvn.register_new_node_with_optimizer(if_f);
-          set_loop(if_f, l);
+          set_loop(if_f, _ltree_root);
           // Find frame ptr for Halt.  Relies on the optimizer
           // V-N'ing.  Easier and quicker than searching through
           // the program structure.
@@ -5491,10 +5515,27 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
           // Halt & Catch Fire
           Node* halt = new HaltNode(if_f, frame, "never-taken loop exit reached");
           _igvn.register_new_node_with_optimizer(halt);
-          set_loop(halt, l);
+          set_loop(halt, _ltree_root);
           _igvn.add_input_to(C->root(), halt);
         }
         set_loop(C->root(), _ltree_root);
+        // move to outer most loop with same header
+        l = m_loop;
+        while (true) {
+          IdealLoopTree* next = l->_parent;
+          if (next == nullptr || next->_head != m) {
+            break;
+          }
+          l = next;
+        }
+        // properly insert infinite loop in loop tree
+        sort(_ltree_root, l);
+        // fix child link from parent
+        IdealLoopTree* p = l->_parent;
+        l->_next = p->_child;
+        p->_child = l;
+        // code below needs enclosing loop
+        l = l->_parent;
       }
     }
     if (is_postvisited(l->_head)) {
@@ -5548,7 +5589,7 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
     assert( get_loop(n) == innermost, "" );
     IdealLoopTree *p = innermost->_parent;
     IdealLoopTree *l = innermost;
-    while( p && l->_head == n ) {
+    while (p && l->_head == n) {
       l->_next = p->_child;     // Put self on parents 'next child'
       p->_child = l;            // Make self as first child of parent
       l = p;                    // Now walk up the parent chain
@@ -5562,7 +5603,7 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
     // Record tightest enclosing loop for self.  Mark as post-visited.
     set_loop(n, innermost);
     // Also record has_call flag early on
-    if( innermost ) {
+    if (innermost) {
       if( n->is_Call() && !n->is_CallLeaf() && !n->is_macro() ) {
         // Do not count uncommon calls
         if( !n->is_CallStaticJava() || !n->as_CallStaticJava()->_name ) {
