@@ -4,5 +4,5 @@ nssSecmodDirectory = ${fips.nssdb.path}
 nssDbMode = readWrite
 nssModule = fips
 
-attributes(*,CKO_SECRET_KEY,CKK_GENERIC_SECRET)={ CKA_SIGN=true }
+attributes(*,CKO_SECRET_KEY,*)={ CKA_SIGN=true CKA_ENCRYPT=true }
 
