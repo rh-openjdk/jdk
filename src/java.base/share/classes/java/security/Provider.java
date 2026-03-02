@@ -1207,9 +1207,7 @@ public abstract class Provider extends Properties {
     private static final class RedHatFIPSFilter {
         static final boolean IS_ON = Boolean.parseBoolean(
                 Security.getProperty("__redhat_fips_filter__"));
-        private static final Set<String> ANY_SERVICE_TYPE = Set.of();
         private static final Map<String, Set<String>> ALLOW_LIST = Map.of(
-                "SunPKCS11-FIPS", ANY_SERVICE_TYPE,
                 "SUN", Set.of(
                         "AlgorithmParameterGenerator",
                         "AlgorithmParameters", "CertificateFactory",
@@ -1217,21 +1215,18 @@ public abstract class Provider extends Properties {
                         "Configuration", "KeyStore"),
                 "SunEC", Set.of(
                         "AlgorithmParameters", "KeyFactory"),
-                "SunJSSE", ANY_SERVICE_TYPE,
                 "SunJCE", Set.of(
                         "AlgorithmParameters",
                         "AlgorithmParameterGenerator", "KeyFactory",
                         "SecretKeyFactory"),
                 "SunRsaSign", Set.of(
-                        "KeyFactory", "AlgorithmParameters"),
-                "XMLDSig", ANY_SERVICE_TYPE
+                        "KeyFactory", "AlgorithmParameters")
         );
 
         static boolean isAllowed(String provName, String serviceType) {
             Set<String> allowedServiceTypes = ALLOW_LIST.get(provName);
-            return allowedServiceTypes != null &&
-                    (allowedServiceTypes == ANY_SERVICE_TYPE ||
-                            allowedServiceTypes.contains(serviceType));
+            return allowedServiceTypes == null ||
+                    allowedServiceTypes.contains(serviceType);
         }
     }
     /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ FIPS PATCH ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
