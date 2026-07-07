@@ -447,7 +447,7 @@ public class WhiteBox {
       try {
         wfrp = Reference.class.getDeclaredMethod("waitForReferenceProcessing");
         wfrp.setAccessible(true);
-        assert wfrp.getReturnType() == Boolean.class;
+        assert wfrp.getReturnType().equals(boolean.class);
         Class<?>[] ev = wfrp.getExceptionTypes();
         assert ev.length == 1;
         assert ev[0] == InterruptedException.class;
@@ -678,7 +678,8 @@ public class WhiteBox {
 
   // Container testing
   public native boolean isContainerized();
-  public native int validateCgroup(String procCgroups,
+  public native int validateCgroup(boolean cgroupsV2Enabled,
+                                   String controllersFile,
                                    String procSelfCgroup,
                                    String procSelfMountinfo);
   public native void printOsInfo();
