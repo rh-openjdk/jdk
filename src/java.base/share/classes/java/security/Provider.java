@@ -1208,6 +1208,12 @@ public abstract class Provider extends Properties {
         static final boolean IS_ON = Boolean.parseBoolean(
                 Security.getProperty("__redhat_fips_filter__"));
         private static final Map<String, Set<String>> ALLOW_LIST = Map.of(
+                // OPENJDK-5271: keep the intermediary HybridProvider disabled
+                // until a FIPS-validated PQC implementation becomes available
+                // through SunPKCS11 (or a newer FIPS provider). This prevents
+                // the X25519MLKEM768 hybrid key exchange named group from
+                // being selected, which would otherwise break TLS 1.3.
+                "HybridAndDHAsKEM", Set.of(),
                 "SUN", Set.of(
                         "AlgorithmParameterGenerator",
                         "AlgorithmParameters", "CertificateFactory",
