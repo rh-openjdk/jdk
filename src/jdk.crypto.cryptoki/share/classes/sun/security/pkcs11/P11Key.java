@@ -952,7 +952,7 @@ abstract class P11Key implements Key, Length {
             params = new DSAParameterSpec(res[0], res[1], res[2]);
         }
 
-        protected DSAParams getParams() {
+        public DSAParams getParams() {
             fetchValues();
             return params;
         }
@@ -1255,7 +1255,7 @@ abstract class P11Key implements Key, Length {
             }
         }
 
-        protected ECParameterSpec getParams() {
+        public ECParameterSpec getParams() {
             fetchValues();
             return params;
         }

@@ -8231,10 +8231,12 @@ instruct compareAndExchangeB(
   effect(KILL cr);
 
   format %{ "cmpxchgb $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t"  %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax; rax -> byte\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgb($newval$$Register, $mem_ptr$$Address);
+    __ narrow_subword_type($oldval$$Register, T_BYTE);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
@@ -8248,10 +8250,12 @@ instruct compareAndExchangeS(
   effect(KILL cr);
 
   format %{ "cmpxchgw $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t"  %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax; rax -> short\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgw($newval$$Register, $mem_ptr$$Address);
+    __ narrow_subword_type($oldval$$Register, T_SHORT);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
@@ -8265,7 +8269,8 @@ instruct compareAndExchangeI(
   effect(KILL cr);
 
   format %{ "cmpxchgl $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t"  %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgl($newval$$Register, $mem_ptr$$Address);
@@ -8283,7 +8288,8 @@ instruct compareAndExchangeL(
   effect(KILL cr);
 
   format %{ "cmpxchgq $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t"  %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgq($newval$$Register, $mem_ptr$$Address);
@@ -8299,7 +8305,8 @@ instruct compareAndExchangeN(
   effect(KILL cr);
 
   format %{ "cmpxchgl $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t" %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgl($newval$$Register, $mem_ptr$$Address);
@@ -8317,7 +8324,8 @@ instruct compareAndExchangeP(
   effect(KILL cr);
 
   format %{ "cmpxchgq $mem_ptr,$newval\t# "
-            "If rax == $mem_ptr then store $newval into $mem_ptr\n\t" %}
+            "If rax == $mem_ptr then store $newval into $mem_ptr, "
+            "else store $mem_ptr into rax\n\t" %}
   ins_encode %{
     __ lock();
     __ cmpxchgq($newval$$Register, $mem_ptr$$Address);
@@ -8340,10 +8348,11 @@ instruct xaddB_no_res( memory mem, Universe dummy, immI add, rFlagsReg cr) %{
 instruct xaddB( memory mem, rRegI newval, rFlagsReg cr) %{
   match(Set newval (GetAndAddB mem newval));
   effect(KILL cr);
-  format %{ "XADDB  [$mem],$newval" %}
+  format %{ "XADDB  [$mem],$newval\t# $newval -> byte" %}
   ins_encode %{
     __ lock();
     __ xaddb($mem$$Address, $newval$$Register);
+    __ narrow_subword_type($newval$$Register, T_BYTE);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
@@ -8363,10 +8372,11 @@ instruct xaddS_no_res( memory mem, Universe dummy, immI add, rFlagsReg cr) %{
 instruct xaddS( memory mem, rRegI newval, rFlagsReg cr) %{
   match(Set newval (GetAndAddS mem newval));
   effect(KILL cr);
-  format %{ "XADDW  [$mem],$newval" %}
+  format %{ "XADDW  [$mem],$newval\t# $newval -> short" %}
   ins_encode %{
     __ lock();
     __ xaddw($mem$$Address, $newval$$Register);
+    __ narrow_subword_type($newval$$Register, T_SHORT);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
@@ -8419,18 +8429,20 @@ instruct xaddL( memory mem, rRegL newval, rFlagsReg cr) %{
 
 instruct xchgB( memory mem, rRegI newval) %{
   match(Set newval (GetAndSetB mem newval));
-  format %{ "XCHGB  $newval,[$mem]" %}
+  format %{ "XCHGB  $newval,[$mem]\t# $newval -> byte" %}
   ins_encode %{
     __ xchgb($newval$$Register, $mem$$Address);
+    __ narrow_subword_type($newval$$Register, T_BYTE);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
 
 instruct xchgS( memory mem, rRegI newval) %{
   match(Set newval (GetAndSetS mem newval));
-  format %{ "XCHGW  $newval,[$mem]" %}
+  format %{ "XCHGW  $newval,[$mem]\t# $newval -> short" %}
   ins_encode %{
     __ xchgw($newval$$Register, $mem$$Address);
+    __ narrow_subword_type($newval$$Register, T_SHORT);
   %}
   ins_pipe( pipe_cmpxchg );
 %}
